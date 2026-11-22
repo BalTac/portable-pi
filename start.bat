@@ -18,8 +18,8 @@ if not defined NODE_DIR (
 
 REM ── portable toolchain ───────────────────────────────────────────────
 set "PATH=%NODE_DIR%;%USB%\tools\bin;%PATH%"
-if exist "%USB%\tools\git\portablegit\usr\bin\bash.exe" (
-    set "PATH=%USB%\tools\git\portablegit\usr\bin;%USB%\tools\git\portablegit\bin;%USB%\tools\git\portablegit\cmd;%USB%\tools\git\portablegit\mingw64\bin;%PATH%"
+if exist "%USB%\tools\git\mingit\usr\bin\bash.exe" (
+    set "PATH=%USB%\tools\git\mingit\usr\bin;%USB%\tools\git\mingit\ucrt64\bin;%USB%\tools\git\mingit\cmd;%PATH%"
 )
 
 REM ── agent dir: everything stays on the drive ─────────────────────────

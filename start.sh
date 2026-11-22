@@ -27,8 +27,10 @@ fi
 
 # ── portable toolchain ───────────────────────────────────────────────
 export PATH="$NODE_DIR/bin:$USB/tools/bin:$PATH"
-if [ -d "$USB/tools/git/portablegit/usr/bin" ]; then
-    export PATH="$USB/tools/git/portablegit/usr/bin:$USB/tools/git/portablegit/bin:$PATH"
+if [ -d "$USB/tools/git/mingit/usr/bin" ] || [ -d "$USB/tools/git/portablegit/usr/bin" ]; then
+    GITDIR="$USB/tools/git/mingit"
+    [ -d "$GITDIR" ] || GITDIR="$USB/tools/git/portablegit"
+    export PATH="$GITDIR/usr/bin:$GITDIR/ucrt64/bin:$GITDIR/cmd:$GITDIR/bin:$PATH"
 fi
 
 # ── agent dir: everything stays on the drive ─────────────────────────

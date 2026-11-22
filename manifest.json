@@ -69,15 +69,25 @@
   "git": {
     "enabled": true,
     "platforms": ["win-x64"],
-    "portableGit": {
+    "mode": "mingit",
+    "minGit": {
+      "version": "2.56.1",
+      "file": "MinGit-2.56.1-64-bit.zip",
+      "url": "https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/MinGit-2.56.1-64-bit.zip",
+      "sizeMb": 30,
+      "installDir": "tools/git/mingit",
+      "pathEntries": ["cmd", "ucrt64/bin", "usr/bin"],
+      "bashFromSh": true,
+      "reason": "MinGit ships usr/bin/sh.exe which IS GNU bash 5.3 (cygwin build), plus the coreutils. Copying sh.exe to bash.exe satisfies pi's bash.exe lookup. 376 files / 93 MB extracted vs 9.622 files / 392 MB for PortableGit."
+    },
+    "portableGitOptional": {
       "version": "2.56.1",
       "file": "PortableGit-2.56.1-64-bit.7z.exe",
       "url": "https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/PortableGit-2.56.1-64-bit.7z.exe",
-      "sizeMb": 57,
       "installDir": "tools/git/portablegit",
-      "pathEntries": ["cmd", "bin", "usr/bin"],
-      "reason": "pi's bash tool searches PATH and Program Files\\Git for bash.exe. A virgin Windows host may have neither. PortableGit also provides git for worktrees/checkpoints. Linux hosts always have bash."
-    }
+      "note": "only if a host needs a fuller MSYS2 toolchain; not used by default"
+    },
+    "reason": "pi's bash tool searches PATH and Program Files\\Git for bash.exe. A virgin Windows host may have neither. This also provides git for worktrees/checkpoints. Linux hosts always have bash."
   },
 
   "paths": {
@@ -188,9 +198,9 @@
     "nodeLinux": "~110 MB",
     "piRuntime": "~25 MB",
     "skills": "~22 MB",
-    "portableGit": "~350 MB extracted",
-    "totalWithoutGit": "~240 MB",
-    "totalWithGit": "~590 MB",
+    "portableGit": "~93 MB extracted (MinGit, 376 files)",
+    "totalWithoutGit": "~330 MB",
+    "totalWithGit": "~425 MB",
     "recommendedDrive": "2 GB exFAT, USB 3.0"
   }
 }

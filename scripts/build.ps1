@@ -52,18 +52,21 @@ function Invoke-Download([string]$Url, [string]$Dest) {
 }
 
 function Get-Sha256([string]$Path) {
-    (Get-FileHash -Path $Path -Algorithm SHA256).Hash.ToLower()
+    # .NET instead of Get-FileHash: the cmdlet is unavailable in some Windows
+    # PowerShell setups where the PS7 module dir shadows the v1.0 modules.
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $fs = [IO.File]::OpenRead($Path)
+    try { $hash = $sha.ComputeHash($fs) } finally { $fs.Dispose(); $sha.Dispose() }
+    -join ($hash | ForEach-Object { $_.ToString('x2') })
 }
 
 function Expand-ArchiveAny([string]$Archive, [string]$Dest) {
     New-Item -ItemType Directory -Force -Path $Dest | Out-Null
-    if ($Archive -match '\.zip$') {
-        Expand-Archive -Path $Archive -DestinationPath $Dest -Force
-        return
-    }
-    $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
-    if (-not $tar) { throw "tar.exe not available (needed for $Archive). Windows 10 1803+ ships it." }
-    & tar.exe -xf $Archive -C $Dest
+    # Must be the Windows bsdtar in System32: a GNU tar from Git-for-Windows on PATH
+    # treats "C:\..." as an rsh host spec and fails.
+    $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+    if (-not (Test-Path $tar)) { throw "$tar not found. Windows 10 1803+ ships it, or build on Linux with build.sh." }
+    & $tar -xf $Archive -C $Dest
     if ($LASTEXITCODE -ne 0) { throw "tar extraction failed for $Archive" }
 }
 
@@ -107,6 +110,14 @@ function Copy-TextLf([string]$Source, [string]$Dest) {
     [IO.File]::WriteAllBytes($Dest, [Text.Encoding]::UTF8.GetBytes($text))
 }
 
+# Batch files must be CRLF: cmd.exe misparses LF-only multi-line if/label blocks.
+function Copy-TextCrlf([string]$Source, [string]$Dest) {
+    $dir = Split-Path -Parent $Dest
+    if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    $text = ([IO.File]::ReadAllText($Source) -replace "`r`n", "`n") -replace "`n", "`r`n"
+    [IO.File]::WriteAllBytes($Dest, [Text.Encoding]::UTF8.GetBytes($text))
+}
+
 function Copy-Subset([string]$Source, [string]$Dest, [string[]]$Keep) {
     New-Item -ItemType Directory -Force -Path $Dest | Out-Null
     foreach ($entry in $Keep) {
@@ -127,7 +138,7 @@ try {
     if (-not (Test-Path $Target)) { throw "Target '$Target' does not exist. Plug the USB drive in first." }
     $Target = (Resolve-Path $Target).Path.TrimEnd('\', '/')
     Write-Step "Building portable-pi at $Target"
-    Write-Ok "node $NodeVersion | pi $PiVersion | git: $(if ($SkipGit) { 'skipped' } else { $M.git.portableGit.version })"
+    Write-Ok "node $NodeVersion | pi $PiVersion | git: $(if ($SkipGit) { 'skipped' } else { 'MinGit ' + $M.git.minGit.version })"
 
     $drive = (Split-Path -Qualifier $Target).TrimEnd(':')
     try {
@@ -161,8 +172,11 @@ try {
                 Write-Step "Downloading $archiveName"
                 Invoke-Download ($t.url -replace '\{version\}', $NodeVersion) $archive
 
-                $expected = ($sumLines | Where-Object { $_ -match [regex]::Escape($archiveName) }
-                    | ForEach-Object { ($_ -split '\s+')[0] })
+                $expected = $null
+                $pattern = '\s' + [regex]::Escape($archiveName) + '$'
+                foreach ($line in $sumLines) {
+                    if ($line -match $pattern) { $expected = ($line -split '\s+')[0]; break }
+                }
                 if (-not $expected) { throw "no checksum for $archiveName in SHASUMS256.txt" }
                 $actual = Get-Sha256 $archive
                 if ($actual -ne $expected.ToLower()) { throw "checksum mismatch for $archiveName (got $actual)" }
@@ -239,7 +253,6 @@ try {
         Write-Ok "auth.json already on the drive (kept)"
     } elseif (Test-Path $authSrc) {
         Copy-Item $authSrc $authDst -Force
-        if (-not $IsWindows -and $PSVersionTable.PSEdition -eq 'Core') { }
         Write-Ok "auth.json copied from $authSrc"
     } else {
         Write-Warn2 "no auth.json found on this host: run 'pi' once on the drive and use /login"
@@ -248,7 +261,8 @@ try {
     foreach ($e in @(@{ src = 'config\env.example.sh'; dst = 'config\env.sh' }, @{ src = 'config\env.example.bat'; dst = 'config\env.bat' })) {
         $dst = Join-Path $Target $e.dst
         if (-not (Test-Path $dst)) {
-            Copy-Item (Join-Path $RepoRoot $e.src) $dst
+            if ($e.dst -like '*.bat') { Copy-TextCrlf (Join-Path $RepoRoot $e.src) $dst }
+            else { Copy-Item (Join-Path $RepoRoot $e.src) $dst }
             Write-Ok "$($e.dst) created from template"
         }
     }
@@ -271,15 +285,16 @@ try {
 
     # ── launchers + docs ──────────────────────────────────────────────────
     Write-Step "Installing launchers and docs"
-    foreach ($f in @('start.bat', 'autorun.inf', 'README.md')) {
+    foreach ($f in @('autorun.inf', 'README.md')) {
         Copy-Item (Join-Path $RepoRoot $f) (Join-Path $Target $f) -Force
     }
+    Copy-TextCrlf (Join-Path $RepoRoot 'start.bat') (Join-Path $Target 'start.bat')
     Copy-TextLf (Join-Path $RepoRoot 'start.sh') (Join-Path $Target 'start.sh')
 
     $binDir = Join-Path $Target 'tools\bin'
     New-Item -ItemType Directory -Force -Path $binDir | Out-Null
     Copy-TextLf (Join-Path $RepoRoot 'scripts\shims\pi.sh') (Join-Path $binDir 'pi')
-    Copy-Item (Join-Path $RepoRoot 'scripts\shims\pi.cmd') (Join-Path $binDir 'pi.cmd') -Force
+    Copy-TextCrlf (Join-Path $RepoRoot 'scripts\shims\pi.cmd') (Join-Path $binDir 'pi.cmd')
     Write-Ok "shims: tools/bin/pi, tools/bin/pi.cmd"
     New-Item -ItemType Directory -Force -Path (Join-Path $Target 'docs') | Out-Null
     Copy-Item (Join-Path $RepoRoot 'docs\scope.md') (Join-Path $Target 'docs\scope.md') -Force
@@ -287,21 +302,28 @@ try {
 
     # ── portable git (windows only) ───────────────────────────────────────
     if ($M.git.enabled -and -not $SkipGit) {
-        $gitDir = Join-Path $Target $M.git.portableGit.installDir
+        $g = $M.git.minGit
+        $gitDir = Join-Path $Target $g.installDir
         if ((Test-Path (Join-Path $gitDir 'usr\bin\bash.exe')) -and -not $Force) {
-            Write-Step "PortableGit already present, skipping"
+            Write-Step "MinGit already present, skipping"
         } else {
-            $sfx = Join-Path $Staging $M.git.portableGit.file
-            Write-Step "Downloading PortableGit $($M.git.portableGit.version) (~$($M.git.portableGit.sizeMb) MB)"
-            Invoke-Download $M.git.portableGit.url $sfx
+            $zip = Join-Path $Staging $g.file
+            Write-Step "Downloading MinGit $($g.version) (~$($g.sizeMb) MB)"
+            Invoke-Download $g.url $zip
+            Remove-Item $gitDir -Recurse -Force -ErrorAction SilentlyContinue
             New-Item -ItemType Directory -Force -Path $gitDir | Out-Null
-            Write-Step "Extracting PortableGit"
-            & $sfx -y "-o$gitDir" | Out-Null
-            if (-not (Test-Path (Join-Path $gitDir 'usr\bin\bash.exe'))) { throw "PortableGit extraction failed" }
-            Write-Ok "bash: $gitDir\usr\bin\bash.exe"
+            Write-Step "Extracting MinGit"
+            Expand-ArchiveAny $zip $gitDir
+
+            # MinGit ships sh.exe (which IS GNU bash) but not bash.exe, and pi looks
+            # for bash.exe by name. Same binary, different argv[0].
+            $sh = Join-Path $gitDir 'usr\bin\sh.exe'
+            if (-not (Test-Path $sh)) { throw "MinGit layout unexpected: $sh missing" }
+            Copy-Item $sh (Join-Path $gitDir 'usr\bin\bash.exe') -Force
+            Write-Ok "bash: $gitDir\usr\bin\bash.exe (from sh.exe)"
         }
     } elseif (-not $SkipGit) {
-        Write-Warn2 "git.portableGit is not available for this platform, skipping"
+        Write-Warn2 "git is disabled in the manifest, skipping"
     }
 
     # ── verify ────────────────────────────────────────────────────────────
@@ -343,7 +365,7 @@ try {
             @{ n = 'node linux-x64'; p = $out.NodeLinux },
             @{ n = 'pi runtime'; p = $out.Runtime },
             @{ n = 'config/skills'; p = $out.Config },
-            @{ n = 'portablegit'; p = (Join-Path $Target $M.git.portableGit.installDir) })) {
+            @{ n = 'portablegit'; p = (Join-Path $Target $M.git.minGit.installDir) })) {
         if (Test-Path $part.p) {
             $mb = [math]::Round(((Get-ChildItem $part.p -Recurse -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum) / 1MB, 1)
             $fc = (Get-ChildItem $part.p -Recurse -File -ErrorAction SilentlyContinue).Count

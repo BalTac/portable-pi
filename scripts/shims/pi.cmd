@@ -25,6 +25,9 @@ if not defined NODE_COMPILE_CACHE set "NODE_COMPILE_CACHE=%USB%\temp\node-cache"
 if not defined XDG_CACHE_HOME set "XDG_CACHE_HOME=%USB%\temp\cache"
 
 set "CLI=%USB%\tools\pi\node_modules\@earendil-works\pi-coding-agent\dist\bundle\cli.js"
+if exist "%USB%\tools\git\mingit\usr\bin\bash.exe" (
+  set "PATH=%USB%\tools\git\mingit\usr\bin;%USB%\tools\git\mingit\ucrt64\bin;%USB%\tools\git\mingit\cmd;%PATH%"
+)
 set "SKILLS=%USB%\config\pi\skills"
 if exist "%SKILLS%" (
   "%NODE_DIR%\node.exe" "%CLI%" -ns --skill "%SKILLS%" %*
