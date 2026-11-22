@@ -226,6 +226,19 @@ fi
 
 # ── skills ──────────────────────────────────────────────────────────────
 step "Copying $(sget 'skills.include.length') whitelisted skills"
+# the drive mirrors the whitelist: drop anything else (pruned entries, hand-added folders).
+# update only refreshes, it never deletes.
+SKILLS_DIR_ON_DRIVE="$TARGET/$SKILLS_DIR"
+if [ -d "$SKILLS_DIR_ON_DRIVE" ]; then
+    for d in "$SKILLS_DIR_ON_DRIVE"/*/; do
+        [ -d "$d" ] || continue
+        name="$(basename "$d")"
+        listed=0
+        j=0; n="$(sget 'skills.include.length')"
+        while [ "$j" -lt "$n" ]; do [ "$(sget "skills.include[$j].name")" = "$name" ] && listed=1; j=$((j + 1)); done
+        [ "$listed" = 1 ] || { rm -rf "$d"; ok "pruned $name"; }
+    done
+fi
 COUNT="$(sget 'skills.include.length')"
 i=0
 while [ "$i" -lt "$COUNT" ]; do

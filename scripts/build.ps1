@@ -304,6 +304,12 @@ try {
 
     # ── skills ────────────────────────────────────────────────────────────
     Write-Step "Copying $(@($SkillList.include).Count) whitelisted skills"
+    # the drive mirrors the whitelist: anything else (pruned entries, hand-added folders)
+    # is removed on a build. `update` only refreshes, it never deletes.
+    $keepNames = @($SkillList.include | ForEach-Object { $_.name })
+    foreach ($d in (Get-ChildItem $out.Skills -Directory -ErrorAction SilentlyContinue)) {
+        if ($keepNames -notcontains $d.Name) { Remove-Item $d.FullName -Recurse -Force; Write-Ok "pruned $($d.Name)" }
+    }
     $roots = @{
         agent  = Join-Path $env:USERPROFILE '.pi\agent'
         agents = Join-Path $env:USERPROFILE '.agents'
