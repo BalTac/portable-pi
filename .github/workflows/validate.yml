@@ -17,15 +17,23 @@ jobs:
       - name: schema is valid JSON
         run: node -e "JSON.parse(require('fs').readFileSync('docs/manifest.schema.json','utf8'))"
 
-      - name: every included skill is declared with a reason
+      - name: skill whitelist shape (manifest + example)
         run: |
           node -e '
+            const checkInclude = (label, list) => {
+              const bad = list.filter(s => !s.name || !s.root || !s.path);
+              if (bad.length) { console.error(label + ": incomplete include entry", bad); process.exit(1); }
+            };
+            const checkExclude = (label, list) => {
+              const bad = list.filter(s => !s.name || !s.reason || s.reason.length < 10);
+              if (bad.length) { console.error(label + ": exclusion without a reason", bad.map(s => s.name)); process.exit(1); }
+            };
             const m = require("./manifest.json");
-            const bad = m.skills.include.filter(s => !s.name || !s.root || !s.path);
-            if (bad.length) { console.error("incomplete include entry", bad); process.exit(1); }
-            const noReason = m.skills.exclude.filter(s => !s.reason || s.reason.length < 10);
-            if (noReason.length) { console.error("exclusions without a reason:", noReason.map(s => s.name)); process.exit(1); }
-            console.log(`${m.skills.include.length} included, ${m.skills.exclude.length} excluded`);
+            const ex = require("./skills.example.json");
+            checkInclude("manifest", m.skills.include);
+            checkInclude("example", ex.include);
+            checkExclude("example", ex.exclude);
+            console.log("manifest: " + m.skills.include.length + " skills; example: " + ex.include.length + " included, " + ex.exclude.length + " excluded");
           '
 
       - name: shell syntax

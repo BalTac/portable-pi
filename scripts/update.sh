@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Aggiorna una chiavetta portable-pi esistente (lato Linux).
+# Update an existing portable-pi drive (Linux side).
 #
 #   bash /media/$USER/PORTABLE-PI/scripts/update.sh
 #   bash /media/$USER/PORTABLE-PI/scripts/update.sh --pi latest
 #   bash /media/$USER/PORTABLE-PI/scripts/update.sh --node latest --skip-skills
 #
-# Rinfresca il runtime di pi (e opzionalmente Node) e le skill whitelist.
-# Non tocca MAI auth.json, sessions/, settings.json, models.json
-# e le skill che hai aggiunto tu al drive.
+# Refreshes the pi runtime (and optionally Node) plus the whitelisted skills.
+# Never touches auth.json, sessions/, settings.json, models.json
+# or skills you added to the drive yourself.
 set -euo pipefail
 
 DRIVE=""
@@ -26,7 +26,7 @@ while [ $# -gt 0 ]; do
         --no-verify) NO_VERIFY=1 ;;
         --force-pi) FORCE_PI=1 ;;
         -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
-        -*) echo "opzione sconosciuta: $1" >&2; exit 2 ;;
+        -*) echo "unknown option: $1" >&2; exit 2 ;;
         *) DRIVE="$1" ;;
     esac
     shift
@@ -35,7 +35,7 @@ done
 [ -n "$DRIVE" ] || DRIVE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DRIVE="$(cd "$DRIVE" && pwd)"
 MANIFEST="$DRIVE/manifest.json"
-[ -f "$MANIFEST" ] || { echo "manifest.json non trovato sul drive: $MANIFEST" >&2; exit 1; }
+[ -f "$MANIFEST" ] || { echo "manifest.json not found on the drive: $MANIFEST" >&2; exit 1; }
 
 # use the drive's own node: no host dependency
 NODE_BIN="$(find "$DRIVE/bin/linux" -maxdepth 1 -name 'node-v*-linux-x64' -type d 2>/dev/null | head -1)"
@@ -43,7 +43,7 @@ NODE_EXE="$NODE_BIN/bin/node"
 if [ ! -x "$NODE_EXE" ]; then
     NODE_EXE="$(command -v node || true)"
 fi
-[ -n "$NODE_EXE" ] || { echo "nessun node utilizzabile (drive non eseguibile? monta con umask=000)" >&2; exit 1; }
+[ -n "$NODE_EXE" ] || { echo "no usable node (drive not executable? mount with umask=000)" >&2; exit 1; }
 
 jget() { "$NODE_EXE" -e 'const m=require(process.argv[1]);console.log(eval(process.argv[2]))' "$MANIFEST" "$1"; }
 
@@ -86,7 +86,7 @@ RUNTIME_NM="$DRIVE/$(jget 'm.paths.runtimeDir')/node_modules"
 INSTALLED="$(jget 'm.pi.version')"
 
 if [ "$FORCE_PI" = 0 ] && [ "$PI_VERSION" = "$INSTALLED" ]; then
-    step "pi $INSTALLED già aggiornato (usa --force-pi per reinstallare)"
+    step "pi $INSTALLED already up to date (use --force-pi to reinstall)"
 else
     step "pi: $INSTALLED -> $PI_VERSION"
     COUNT="$(jget 'm.pi.runtimePackages.length')"
@@ -96,7 +96,7 @@ else
         VERSION="$(jget "m.pi.runtimePackages[$i].version")"
         [ "$NAME" = "@earendil-works/pi-coding-agent" ] && VERSION="$PI_VERSION"
         DEST="$RUNTIME_NM/$NAME"
-        ok "scarico $NAME@$VERSION"
+        ok "downloading $NAME@$VERSION"
         download "$(npm_url "$NAME" "$VERSION")" "$STAGING/pkg.tgz"
         rm -rf "$STAGING/pkg"; extract "$STAGING/pkg.tgz" "$STAGING/pkg"
         deref_links "$STAGING/pkg"
@@ -117,7 +117,7 @@ else
 
     CLI="$RUNTIME_NM/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
     OUT="$(PI_CODING_AGENT_DIR="$DRIVE/$(jget 'm.paths.agentDir')" PI_SKIP_VERSION_CHECK=1 "$NODE_EXE" "$CLI" --version)"
-    case "$OUT" in *[0-9].[0-9].[0-9]*) ok "pi ora risponde: $OUT" ;; *) echo "pi --version non risponde: $OUT" >&2; exit 1 ;; esac
+    case "$OUT" in *[0-9].[0-9].[0-9]*) ok "pi ora risponde: $OUT" ;; *) echo "pi --version did not answer: $OUT" >&2; exit 1 ;; esac
     "$NODE_EXE" -e '
       const fs=require("fs");const p=process.argv[1];const m=JSON.parse(fs.readFileSync(p,"utf8"));
       m.pi.version=process.argv[2];m.pi.runtimePackages[0].version=process.argv[2];
@@ -140,7 +140,7 @@ if [ -n "$NODE_VERSION" ]; then
             ARCHIVE="$("$NODE_EXE" -e 'const m=require(process.argv[1]);console.log(m.node.targets[+process.argv[2]].archive.split("{version}").join(process.argv[3]))' "$MANIFEST" "$i" "$NODE_VERSION")"
             URL="$("$NODE_EXE" -e 'const m=require(process.argv[1]);console.log(m.node.targets[+process.argv[2]].url.split("{version}").join(process.argv[3]))' "$MANIFEST" "$i" "$NODE_VERSION")"
             INSTALL_REL="$("$NODE_EXE" -e 'const m=require(process.argv[1]);console.log(m.node.targets[+process.argv[2]].installDir.split("{version}").join(process.argv[3]))' "$MANIFEST" "$i" "$NODE_VERSION")"
-            ok "scarico $ARCHIVE"
+            ok "downloading $ARCHIVE"
             download "$URL" "$STAGING/$ARCHIVE"
             EXPECTED="$(grep -E "[[:space:]]$ARCHIVE\$" "$STAGING/sums.txt" | awk '{print $1}')"
             ACTUAL="$(sha256sum "$STAGING/$ARCHIVE" | awk '{print $1}')"
@@ -161,11 +161,11 @@ if [ -n "$NODE_VERSION" ]; then
         done
         "$NODE_EXE" -e 'const fs=require("fs");const p=process.argv[1];const m=JSON.parse(fs.readFileSync(p,"utf8"));m.node.version=process.argv[2];fs.writeFileSync(p,JSON.stringify(m,null,2)+"\n");' "$MANIFEST" "$NODE_VERSION"
     else
-        step "node $NODE_VERSION già presente"
+        step "node $NODE_VERSION already present"
     fi
 fi
 
-# ── skills (solo se le sorgenti di questo PC esistono) ──────────────────
+# ── skills (only when this PC has the source folders) ───────────────────
 if [ "$SKIP_SKILLS" = 0 ]; then
     MISSING=""
     COUNT="$(jget 'm.skills.include.length')"
@@ -184,7 +184,7 @@ if [ "$SKIP_SKILLS" = 0 ]; then
     done
 
     if [ -z "$MISSING" ]; then
-        step "Aggiorno $COUNT skill dalla whitelist"
+        step "Refreshing $COUNT whitelisted skills"
         SKILLS_DIR="$DRIVE/$(jget 'm.paths.skillsDir')"
         i=0
         while [ "$i" -lt "$COUNT" ]; do
@@ -202,17 +202,17 @@ if [ "$SKIP_SKILLS" = 0 ]; then
             i=$((i + 1))
         done
     else
-        warn "sorgenti non disponibili su questa macchina:$MISSING — skill lasciate invariate"
-        warn "le skill che hai aggiunto tu al drive restano intatte"
+        warn "skill sources not available on this machine:$MISSING - skills left untouched"
+        warn "skills you added to the drive are untouched"
     fi
 fi
 
 if [ "$NO_VERIFY" = 0 ] && [ -f "$DRIVE/scripts/verify.sh" ]; then
-    step "Collaudo (senza chiamata al modello)"
-    bash "$DRIVE/scripts/verify.sh" "$DRIVE" --no-model || { echo "verify ha segnalato errori" >&2; exit 1; }
+    step "Verification (no model call)"
+    bash "$DRIVE/scripts/verify.sh" "$DRIVE" --no-model || { echo "verify reported errors" >&2; exit 1; }
 fi
 
 sync 2>/dev/null || true
 echo
-echo "Aggiornamento completato."
-echo "Verifica completa con modello:  bash $DRIVE/scripts/verify.sh $DRIVE"
+echo "Update completed."
+echo "Full verification with a model call:  bash $DRIVE/scripts/verify.sh $DRIVE"

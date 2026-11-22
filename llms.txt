@@ -8,8 +8,8 @@
 
 portable-pi builds a bootable-nothing, dependency-free USB stick (~430 MB) that
 contains Node.js 24 LTS for Windows x64 and Linux x64, the `pi` coding agent
-(pi-coding-agent 1.6.0, prebundled ESM), a whitelist of nine agent skills, and
-MinGit for Windows so the agent's `bash` tool works even on a host without Git.
+(pi-coding-agent 1.6.0, prebundled ESM), a configurable skill whitelist, and MinGit
+for Windows so the agent's `bash` tool works even on a host without Git.
 Plug it in, run `start.bat` (Windows) or `start.sh` (Linux), and the agent starts
 with its own configuration, sessions and skills already in place.
 
@@ -42,6 +42,9 @@ reproducible agent environment, isolated agent configuration, LLM agent on a sti
   drive without touching credentials, sessions or user skills.
 - `scripts/verify.ps1` / `scripts/verify.sh` assert the isolation guarantees and
   fail if anything is written outside the drive.
+
+The public repository ships no skill names: the owner's whitelist lives in
+`skills.local.json` (gitignored) and is merged into `<drive>/manifest.json` at build time.
 
 ## Provenance and license
 

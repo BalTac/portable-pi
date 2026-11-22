@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-  Collaudo dell'isolamento e dell'integrita' di una chiavetta portable-pi.
+  Verify isolation and integrity of a portable-pi drive.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\verify.ps1 -Drive E:\
 
 .EXAMPLE
-  # solo controlli statici, nessuna chiamata al modello
+  # static checks only, no model call
   powershell -File scripts\verify.ps1 -Drive C:\Temp\usb-sim -NoModel
 #>
 [CmdletBinding()]
@@ -19,7 +19,6 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-$M = Get-Content (Join-Path $RepoRoot 'manifest.json') -Raw | ConvertFrom-Json
 $fail = 0
 function Pass([string]$m) { Write-Host "  PASS  $m" -ForegroundColor Green }
 function Fail([string]$m) { Write-Host "  FAIL  $m" -ForegroundColor Red; $script:fail++ }
@@ -27,6 +26,11 @@ function Head([string]$m) { Write-Host ""; Write-Host "== $m" -ForegroundColor C
 
 if (-not (Test-Path $Drive)) { throw "drive not found: $Drive" }
 $Drive = (Resolve-Path $Drive).Path.TrimEnd('\', '/')
+
+# Prefer the manifest shipped on the drive: it records the effective skill list.
+$ManifestPath = Join-Path $Drive 'manifest.json'
+if (-not (Test-Path $ManifestPath)) { $ManifestPath = Join-Path $RepoRoot 'manifest.json' }
+$M = Get-Content $ManifestPath -Raw | ConvertFrom-Json
 
 $agentDir = Join-Path $Drive $M.paths.agentDir
 $skillsDir = Join-Path $Drive $M.paths.skillsDir
@@ -61,12 +65,12 @@ Head "No host-specific references"
 $leaks = @()
 foreach ($f in (Get-ChildItem $agentDir -Recurse -File -Include *.json, *.md | Where-Object { $_.Name -notin @('auth.json', 'models-store.json') })) {
     $text = Get-Content $f.FullName -Raw -ErrorAction SilentlyContinue
-    if ($text -match 'C:\\Users|D:\\openclaw|192\.168\.|/mnt/[a-z]/') { $leaks += $f.FullName }
+    if ($text -match '[A-Za-z]:\\Users\\|/mnt/[a-z]/|/home/[a-z]|192\.168\.') { $leaks += $f.FullName }
 }
 if ($leaks.Count -eq 0) { Pass "no host paths or LAN endpoints" } else { Fail "host references in: $($leaks -join ', ')" }
 foreach ($s in (Get-ChildItem $skillsDir -Recurse -File -Include *.md)) {
     $text = Get-Content $s.FullName -Raw -ErrorAction SilentlyContinue
-    if ($text -match 'C:\\Users\\\\|D:\\openclaw|192\.168\.50\.') { Fail "host path in skill: $($s.FullName)" }
+    if ($text -match '[A-Za-z]:\\Users\\\\|/mnt/[a-z]/|/home/[a-z]|192\.168\.') { Fail "host path in skill: $($s.FullName)" }
 }
 
 # ── 4. host config baseline (what must not change) ──────────────────────

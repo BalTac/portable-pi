@@ -6,7 +6,9 @@
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANIFEST="$REPO/manifest.json"
+# prefer the manifest shipped on the drive: it records the effective skill list
+MANIFEST="$DRIVE/manifest.json"
+[ -f "$MANIFEST" ] || MANIFEST="$REPO/manifest.json"
 DRIVE=""
 NO_MODEL=0
 
@@ -67,7 +69,7 @@ EXTRA="$(comm -13 <(printf '%s\n' $EXPECTED | sort) <(printf '%s\n' "$PRESENT"))
 
 # ── 3. no host references in shipped config/skills ──────────────────────
 head_ "No host-specific references"
-LEAKS="$(grep -rlE 'C:\\Users|D:\\openclaw|192\.168\.|/mnt/[a-z]/' "$AGENT_DIR" "$SKILLS_DIR" \
+LEAKS="$(grep -rlE '[A-Za-z]:\\Users\\|/mnt/[a-z]/|/home/[a-z]|192\.168\.' "$AGENT_DIR" "$SKILLS_DIR" \
     --include='*.json' --include='*.md' --exclude=auth.json --exclude=models-store.json 2>/dev/null || true)"
 [ -z "$LEAKS" ] && pass "no host paths or LAN endpoints" || fail "host references in: $LEAKS"
 

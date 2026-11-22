@@ -1,14 +1,14 @@
 <#
 .SYNOPSIS
-  Aggiorna una chiavetta portable-pi esistente, senza toccare auth, sessioni o config.
+  Update an existing portable-pi drive without touching auth, sessions or settings.
 
 .DESCRIPTION
-  Legge <drive>/manifest.json e rinfresca:
-    - il runtime di pi (dist/bundle + pi-tui + photon-node)
-    - opzionalmente Node.js (win+linux) con -Node <versione|latest>
-    - le skill whitelist, SOLO se le sorgenti di questo PC sono raggiungibili
-  Non tocca MAI: config/pi/auth.json, config/pi/sessions/, config/pi/settings.json,
-  config/pi/models.json, file creati dall'utente in config/pi/skills/.
+  Reads <drive>/manifest.json and refreshes:
+    - the pi runtime (dist/bundle + pi-tui + photon-node)
+    - optionally Node.js (win+linux) with -Node <version|latest>
+    - the whitelisted skills, ONLY when this PC has the source folders
+  Never touches: config/pi/auth.json, config/pi/sessions/, config/pi/settings.json,
+  config/pi/models.json, or user-created folders under config/pi/skills/.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File F:\scripts\update.ps1
@@ -100,7 +100,7 @@ try {
     $installed = $M.pi.version
     $needPi = $ForcePi -or ($PiVersion -ne $installed)
     if (-not $needPi) {
-        Step "pi $installed già aggiornato (usa -ForcePi per reinstallare)"
+        Step "pi $installed already up to date (use -ForcePi to reinstall)"
     } else {
         Step "pi: $installed -> $PiVersion"
         foreach ($p in @($M.pi.runtimePackages)) {
@@ -108,7 +108,7 @@ try {
             if ($p.name -eq '@earendil-works/pi-coding-agent') { $version = $PiVersion }
             $dest = Join-Path $nm ($p.name -replace '/', '\')
             $tgz = Join-Path $Staging ((($p.name -replace '[/@]', '_')) + '.tgz')
-            Ok "scarico $($p.name)@$version"
+            Ok "downloading $($p.name)@$version"
             Download (NpmUrl $p.name $version) $tgz
             $x = Join-Path $Staging ('x-' + ($p.name -replace '[/@]', '_'))
             Remove-Item $x -Recurse -Force -ErrorAction SilentlyContinue
@@ -160,7 +160,7 @@ try {
                 $archive = $t.archive.Replace('{version}', $target)
                 $url = $t.url.Replace('{version}', $target)
                 $file = Join-Path $Staging $archive
-                Ok "scarico $archive"
+                Ok "downloading $archive"
                 Download $url $file
                 $expected = $null
                 foreach ($line in $lines) { if ($line -match ('\s' + [regex]::Escape($archive) + '$')) { $expected = ($line -split '\s+')[0]; break } }
@@ -182,7 +182,7 @@ try {
             }
             $M.node.version = $target
         } else {
-            Step "node $target già presente"
+            Step "node $target already present"
         }
     }
 
@@ -207,29 +207,29 @@ try {
                 Ok $s.name
             }
         } else {
-            Warn "sorgenti non disponibili su questa macchina ($($missing -join ', ')): skill lasciate invariate"
-            Warn "le skill locali che hai aggiunto al drive restano intatte"
+            Warn "skill sources not available on this machine ($($missing -join ', ')): skills left untouched"
+            Warn "skills you added to the drive are untouched"
         }
     }
 
     # ── persist versions, then verify ────────────────────────────────────
-    $M | ConvertTo-Json -Depth 20 | Set-Content -Path $ManifestPath -Encoding UTF8
+    [IO.File]::WriteAllText($ManifestPath, ($M | ConvertTo-Json -Depth 20) + "`n", (New-Object System.Text.UTF8Encoding($false)))
     Ok "manifest.json sul drive aggiornato (pi $($M.pi.version), node $($M.node.version))"
 
     if (-not $NoVerify) {
         $v = Join-Path $Drive 'scripts\verify.ps1'
         if (Test-Path $v) {
-            Step "Collaudo (senza chiamata al modello)"
+            Step "Verification (no model call)"
             & $v -Drive $Drive -NoModel
-            if ($LASTEXITCODE -ne 0) { throw "verify ha segnalato errori: controlla l'output sopra" }
-        } else { Warn "scripts\verify.ps1 non trovato, salto il collaudo" }
+            if ($LASTEXITCODE -ne 0) { throw "verify reported errors: see the output above" }
+        } else { Warn "scripts\verify.ps1 not found, skipping verification" }
     }
 
     $driveLetter = (Split-Path -Qualifier $Drive).TrimEnd(':')
-    try { Write-VolumeCache -DriveLetter $driveLetter -ErrorAction Stop; Ok 'cache del volume flushato' } catch { Warn 'flush non disponibile (serve elevazione)' }
+    try { Write-VolumeCache -DriveLetter $driveLetter -ErrorAction Stop; Ok 'volume cache flushed' } catch { Warn 'volume flush unavailable (needs elevation)' }
 
     Write-Host ""
-    Write-Host "Aggiornamento completato." -ForegroundColor Green
+    Write-Host "Update completed." -ForegroundColor Green
     Write-Host "Verifica completa con modello:  powershell -File $Drive\scripts\verify.ps1 -Drive $Drive" -ForegroundColor DarkGray
 }
 finally {

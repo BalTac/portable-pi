@@ -1,50 +1,51 @@
-# Scope: cosa entra nella chiavetta e cosa no
+# Selection policy: what ships and what cannot
 
-Derivato da `manifest.json` (fonte di verità per la build). Regola: **una skill entra solo
-se funziona su una macchina vergine senza altri dispositivi della rete**.
+The skill list itself is private: the repo ships `skills.example.json` only, and the real
+selection lives in `skills.local.json` (gitignored). What follows is the **rule** used to
+decide, so the reasoning is reusable.
 
-## Incluse (9)
+## Rule
 
-| Skill | Peso | Perché è portabile |
-|---|---|---|
-| `frontend-design` | 12 KB | solo istruzioni |
-| `frontend-ui-engineering` | 20 KB | solo istruzioni; `npx` citato come opzione |
-| `impeccable` | 22 MB | porta l'engine self-contained (win-x64); su Linux lo scarica al primo uso |
-| `ponytail`, `-audit`, `-debt`, `-gain`, `-help`, `-review` | ~28 KB | solo istruzioni |
+A skill ships only if it works on a **virgin machine** with nothing but the drive:
 
-## Escluse (14)
+1. it needs no service on your LAN (no fixed IPs, no localhost ports, no GPU box);
+2. it needs no private repository, database or vault that only you have;
+3. it needs no host path (`D:\...`, `/mnt/...`, `~/.local/bin/<your-shim>`);
+4. it needs no installed tool that the drive does not carry (this rules out Python
+   toolchains, browser binaries, GPU models, and similar);
+5. if it depends on a pi extension, that extension must be installable on the drive
+   (`pi install npm:...`) and be pure JS/TS, because the agent dir is shared between
+   Windows and Linux.
 
-| Skill | Dipendenza che la blocca |
+Categories that fail this rule, and why:
+
+| Category | Blocking dependency |
 |---|---|
-| `contextvault` | DB + semantic embedding server sul **Pi 5** (`pi5=True`, nitro) |
-| `voice-nitro` | server XTTS sul **Nitro** (`127.0.0.1:8123`) — esclusa su richiesta |
-| `voice-starlitram` | server TTS su **StarlitRAM** (`192.168.50.185:8008`) — esclusa su richiesta |
-| `voice-clone` | clone voci su StarlitRAM + profili su `/mnt/d/audio-server` del Nitro |
-| `vision-toolkit` | modelli CV (SCUNet/YOLO/SAM2) sul Nitro |
-| `graphify` | CLI `graphify` + redis `:6379` + neo4j `:7687` + python/uv |
-| `session-rotation` | `pi-rotate` (python) in `D:\openclaw\bin` + shim WSL |
-| `subagent` | tool `subagent` fornito dall'estensione pi-toolkit |
-| `council-mode` | estensione pi-subagents |
-| `pi-subagents` | estensione pi-subagents + spawn di processi pi figli |
-| `pi-intercom` | estensione pi-intercom + una seconda sessione viva sullo stesso host |
-| `playwright-browser` | `@playwright/cli` + browser binaries (centinaia di MB) |
-| `llm-wiki` | estensione pi-llm-wiki + un vault esistente |
-| `loop` | il suo flusso invoca il tool `subagent` (7 riferimenti) |
+| Anything talking to a local service | a second machine on your network, a fixed IP, a port |
+| Anything running local models | GPU host, model weights, a Python or CUDA stack |
+| Anything needing a private repo or vault | data that is not on the drive |
+| Anything needing a host shim or absolute path | the drive must be self-contained |
+| Extension-backed skills | the extension must be pure JS and installed on the drive |
+| Skill packages with browser binaries | hundreds of MB downloaded per platform |
 
-## Fase 2 (opzionale, non implementata)
+## How the whitelist is applied
 
-Montare l'estensione `pi-subagents` (13 MB, puro JS) sulla chiavetta sbloccherebbe
-`subagent`, `pi-subagents`, `council-mode` e `loop`. Serve:
+- `skills.local.json` → `include[]` entries `{ name, root, path }`, where `root` is
+  `agent` (`<home>/.pi/agent`), `agents` (`<home>/.agents`) or `npm`
+  (`<home>/.pi/agent/npm/node_modules`).
+- The build copies each entry to `<drive>/config/pi/skills/<name>/` and merges the list into
+  `<drive>/manifest.json`; `update` and `verify` read that drive manifest, so the drive
+  documents itself.
+- Skills with `disable-model-invocation: true` still ship: they are reachable through
+  `/skill:<name>` but are deliberately absent from the model's skill index.
 
-1. installare il pacchetto in `<usb>/config/pi/npm/` e dichiararlo in `settings.json`;
-2. uno shim `pi`/`pi.cmd` su `PATH` per i processi figli;
-3. un test di spawn isolato (i figli devono ereditare `PI_CODING_AGENT_DIR`).
+## Config that gets sanitized
 
-## Config sanificata
+Whatever machine you build on, some files are host-specific and must not travel:
 
-| File | Trattamento |
+| File | Treatment |
 |---|---|
-| `auth.json` | copiato (5 provider: openai-codex, openrouter, nvidia, github-copilot, deepseek) |
-| `settings.json` | solo `theme`, `defaultProvider`, `defaultModel`, `defaultThinkingLevel`, `compaction`. **Scartati** `packages` (12 estensioni con path host) e `llm-wiki.embeddingBaseUrl` (`192.168.50.222:8093`, il Pi 5) |
-| `models.json` | copiato: provider `openmodel`, endpoint pubblico, chiave via `$OPENMODEL_API_KEY` |
-| `AGENTS.md` | riscritto: niente bridge Telegram, niente path `D:\openclaw`; resta la politica "mai push senza approvazione" |
+| `auth.json` | copied (credentials are meant to travel with the drive) |
+| `settings.json` | only `theme`, default provider/model/thinking level and `compaction`; `packages` (extensions bound to host paths) and any embedding endpoint pointing at a LAN address are dropped |
+| `models.json` | copied only if every provider uses a public endpoint and takes its key from an environment variable |
+| `AGENTS.md` | replaced with the portable rule set in `config/pi/AGENTS.md` |

@@ -4,7 +4,6 @@
   "name": "portable-pi",
   "description": "Self-contained portable pie (pi-coding-agent) on a USB drive. Windows x64 + Linux x64. No host installation, no dependency on any other device on the network.",
   "usbLabel": "PORTABLE-PI",
-
   "pi": {
     "version": "1.6.0",
     "entrypoint": "@earendil-works/pi-coding-agent/dist/bundle/cli.js",
@@ -12,19 +11,27 @@
       {
         "name": "@earendil-works/pi-coding-agent",
         "version": "1.6.0",
-        "keep": ["package.json", "dist/bundle", "docs"],
+        "keep": [
+          "package.json",
+          "dist/bundle",
+          "docs"
+        ],
         "reason": "CLI + agent core, prebundled ESM (no runtime deps needed)"
       },
       {
         "name": "@earendil-works/pi-tui",
         "version": "1.6.0",
-        "keep": ["*"],
+        "keep": [
+          "*"
+        ],
         "reason": "native prebuilds for win32/linux/darwin x x64/arm64 are resolved at runtime via require.resolve"
       },
       {
         "name": "@silvia-odwyer/photon-node",
         "version": "0.3.4",
-        "keep": ["*"],
+        "keep": [
+          "*"
+        ],
         "reason": "WASM image resize/EXIF (dynamic import, optional but keeps image support)"
       }
     ],
@@ -36,10 +43,13 @@
         "reason": "codemode worker (WASM). Enable only if codemode is needed."
       }
     ],
-    "launchArgs": ["-ns", "--skill", "{usb}/config/pi/skills"],
+    "launchArgs": [
+      "-ns",
+      "--skill",
+      "{usb}/config/pi/skills"
+    ],
     "launchArgsNote": "-ns disables ALL discovered skills (including the host ~/.agents/skills) while explicit --skill paths keep loading. This is the isolation guarantee."
   },
-
   "node": {
     "version": "24.22.3",
     "flavor": "lts",
@@ -65,10 +75,11 @@
     "checksums": "https://nodejs.org/dist/v{version}/SHASUMS256.txt",
     "extractOnLinuxNote": "npm/npx/corepack are symlinks in the tarball; exFAT has no symlinks, so build must dereference them (cp -rL) or write wrapper scripts."
   },
-
   "git": {
     "enabled": true,
-    "platforms": ["win-x64"],
+    "platforms": [
+      "win-x64"
+    ],
     "mode": "mingit",
     "minGit": {
       "version": "2.56.1",
@@ -76,7 +87,11 @@
       "url": "https://github.com/git-for-windows/git/releases/download/v2.56.1.windows.1/MinGit-2.56.1-64-bit.zip",
       "sizeMb": 30,
       "installDir": "tools/git/mingit",
-      "pathEntries": ["cmd", "ucrt64/bin", "usr/bin"],
+      "pathEntries": [
+        "cmd",
+        "ucrt64/bin",
+        "usr/bin"
+      ],
       "bashFromSh": true,
       "reason": "MinGit ships usr/bin/sh.exe which IS GNU bash 5.3 (cygwin build), plus the coreutils. Copying sh.exe to bash.exe satisfies pi's bash.exe lookup. 376 files / 93 MB extracted vs 9.622 files / 392 MB for PortableGit."
     },
@@ -89,7 +104,6 @@
     },
     "reason": "pi's bash tool searches PATH and Program Files\\Git for bash.exe. A virgin Windows host may have neither. This also provides git for worktrees/checkpoints. Linux hosts always have bash."
   },
-
   "paths": {
     "agentDir": "config/pi",
     "sessionDir": "config/pi/sessions",
@@ -97,7 +111,6 @@
     "tempDir": "temp",
     "runtimeDir": "tools/pi"
   },
-
   "isolation": {
     "env": {
       "PI_CODING_AGENT_DIR": "{usb}/config/pi",
@@ -123,60 +136,45 @@
       "all temp/cache writes land in <usb>/temp"
     ]
   },
-
   "skillSourceRoots": {
     "agent": "~/.pi/agent",
     "agents": "~/.agents",
     "npm": "~/.pi/agent/npm/node_modules"
   },
-
   "skills": {
-    "include": [
-      { "name": "frontend-design", "root": "agent", "path": "skills/frontend-design", "reason": "pure instructions, zero external deps" },
-      { "name": "frontend-ui-engineering", "root": "agents", "path": "skills/frontend-ui-engineering", "reason": "pure instructions; only optional npx tooling mentioned" },
-      { "name": "impeccable", "root": "agents", "path": "skills/impeccable", "reason": "ships a self-contained engine binary (win-x64); on other platforms it downloads once on first run. No local device needed.", "sizeMb": 22, "caveat": "Windows binary bundled; Linux/macOS engine fetched at first use (internet required)" },
-      { "name": "ponytail", "root": "npm", "path": "@bacnh85/pi-ponytail/skills/ponytail", "reason": "pure instructions" },
-      { "name": "ponytail-audit", "root": "npm", "path": "@bacnh85/pi-ponytail/skills/ponytail-audit", "reason": "pure instructions" },
-      { "name": "ponytail-debt", "root": "npm", "path": "@bacnh85/pi-ponytail/skills/ponytail-debt", "reason": "pure instructions" },
-      { "name": "ponytail-gain", "root": "npm", "path": "@bacnh85/pi-ponytail/skills/ponytail-gain", "reason": "pure instructions" },
-      { "name": "ponytail-help", "root": "npm", "path": "@bacnh85/pi-ponytail/skills/ponytail-help", "reason": "pure instructions" },
-      { "name": "ponytail-review", "root": "npm", "path": "@bacnh85/pi-ponytail/skills/ponytail-review", "reason": "pure instructions" }
-    ],
-    "exclude": [
-      { "name": "contextvault", "reason": "needs the ContextVault Core DB + semantic embedding server on the Pi 5 (pi5=True, nitro). Network device." },
-      { "name": "voice-nitro", "reason": "needs the XTTS server on the Nitro (127.0.0.1:8123). Explicitly excluded by the owner." },
-      { "name": "voice-starlitram", "reason": "needs the TTS server on StarlitRAM (192.168.50.185:8008). Explicitly excluded by the owner." },
-      { "name": "voice-clone", "reason": "clones voices on StarlitRAM (:8008) and copies profiles to /mnt/d/audio-server on the Nitro. Network device." },
-      { "name": "vision-toolkit", "reason": "local CV models (SCUNet/YOLO/SAM2) installed on the Nitro GPU box." },
-      { "name": "graphify", "reason": "requires the graphify CLI plus redis (localhost:6379) and neo4j (localhost:7687) and a python/uv toolchain." },
-      { "name": "session-rotation", "reason": "requires pi-rotate (python) in D:\\openclaw\\bin plus a WSL shim in ~/.local/bin. Host-specific paths." },
-      { "name": "subagent", "reason": "requires the pi-toolkit extension to provide the subagent tool (phase 2 option)." },
-      { "name": "council-mode", "reason": "requires the pi-subagents extension (phase 2 option)." },
-      { "name": "pi-subagents", "reason": "requires the pi-subagents extension and spawning child pi processes (phase 2 option)." },
-      { "name": "pi-intercom", "reason": "requires the pi-intercom extension and a second live pi session on the same machine." },
-      { "name": "playwright-browser", "reason": "requires @playwright/cli plus browser binaries (hundreds of MB, downloaded on demand)." },
-      { "name": "llm-wiki", "reason": "requires the pi-llm-wiki extension and an existing vault (16 MB package + wiki state)." },
-      { "name": "loop", "reason": "its workflow calls the subagent tool (7 references), which comes from the pi-toolkit/pi-subagents extension. Phase 2 with subagent." }
-    ],
-    "phase2": [
-      "pi-subagents extension (13 MB, pure JS) mounted on the drive: would enable subagent, pi-subagents, council-mode and loop skills",
-      "requires a pi shim on PATH so child processes can spawn, plus a child-spawn isolation test"
-    ]
+    "include": [],
+    "exclude": [],
+    "note": "The public repo ships no skill names. Put your own selection in skills.local.json (gitignored, see skills.example.json); the build merges it into this manifest and into the drive copy."
   },
-
   "auth": {
     "copyAuthJson": true,
     "source": "~/.pi/agent/auth.json",
-    "providers": ["openai-codex", "openrouter", "nvidia", "github-copilot", "deepseek"],
+    "providers": [
+      "openai-codex",
+      "openrouter",
+      "nvidia",
+      "github-copilot",
+      "deepseek"
+    ],
     "warning": "auth.json contains OAuth tokens / API keys in plaintext. If the drive is lost, revoke them. Recipe documented in README."
   },
-
   "configFiles": {
     "settings.json": {
       "copyFrom": "~/.pi/agent/settings.json",
-      "keepKeys": ["theme", "defaultProvider", "defaultModel", "defaultThinkingLevel", "compaction"],
-      "dropKeys": ["packages", "subagents", "llm-wiki", "extensionChangelogVersions", "lastChangelogVersion"],
-      "dropReason": "packages reference host paths and would auto-install network packages at startup; llm-wiki.embeddingBaseUrl points at the Pi 5 (192.168.50.222:8093)"
+      "keepKeys": [
+        "theme",
+        "defaultProvider",
+        "defaultModel",
+        "defaultThinkingLevel",
+        "compaction"
+      ],
+      "dropKeys": [
+        "packages",
+        "subagents",
+        "extensionChangelogVersions",
+        "lastChangelogVersion"
+      ],
+      "dropReason": "packages reference host paths and would auto-install network packages at startup; any per-extension block pointing at a LAN service must be dropped too"
     },
     "models.json": {
       "copyFrom": "~/.pi/agent/models.json",
@@ -185,14 +183,16 @@
     },
     "AGENTS.md": {
       "mode": "generated",
-      "content": "portable rewrite: no Telegram bridge, no D:\\\\openclaw paths, keeps the git push policy and the Italian default"
+      "content": "portable rewrite of the global instructions: host-safety rules, install-isolation rules, cross-platform constraint, reply in the user's language"
     },
     "env": {
-      "files": ["config/env.sh", "config/env.bat"],
+      "files": [
+        "config/env.sh",
+        "config/env.bat"
+      ],
       "content": "optional API keys (OPENMODEL_API_KEY etc.), never committed"
     }
   },
-
   "sizeBudget": {
     "nodeWin": "~80 MB",
     "nodeLinux": "~110 MB",

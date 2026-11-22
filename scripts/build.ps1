@@ -28,6 +28,12 @@ $ManifestPath = Join-Path $RepoRoot 'manifest.json'
 if (-not (Test-Path $ManifestPath)) { throw "manifest.json not found at $ManifestPath" }
 $M = Get-Content $ManifestPath -Raw | ConvertFrom-Json
 
+# Effective skill whitelist: skills.local.json (gitignored) overrides the manifest,
+# so the public repo never carries the owner's private skill names.
+$SkillsFile = Join-Path $RepoRoot 'skills.local.json'
+$SkillList = $M.skills
+if (Test-Path $SkillsFile) { $SkillList = Get-Content $SkillsFile -Raw | ConvertFrom-Json }
+
 if (-not $NodeVersion) { $NodeVersion = $M.node.version }
 if (-not $PiVersion) { $PiVersion = $M.pi.version }
 
@@ -103,6 +109,12 @@ exec "`$basedir/node" "`$basedir/$JsRelative" "`$@"
 }
 
 # Text files meant for Linux must keep LF endings end-to-end (git on Windows may CRLF them).
+# PS 5.1's Set-Content -Encoding UTF8 adds a BOM, which breaks JSON.parse on the drive.
+function Write-JsonNoBom([string]$Path, $Object) {
+    $json = $Object | ConvertTo-Json -Depth 20
+    [IO.File]::WriteAllText($Path, $json + "`n", (New-Object System.Text.UTF8Encoding($false)))
+}
+
 function Copy-TextLf([string]$Source, [string]$Dest) {
     $dir = Split-Path -Parent $Dest
     if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
@@ -291,13 +303,13 @@ try {
     }
 
     # ── skills ────────────────────────────────────────────────────────────
-    Write-Step "Copying $($M.skills.include.Count) whitelisted skills"
+    Write-Step "Copying $(@($SkillList.include).Count) whitelisted skills"
     $roots = @{
         agent  = Join-Path $env:USERPROFILE '.pi\agent'
         agents = Join-Path $env:USERPROFILE '.agents'
         npm    = Join-Path $env:USERPROFILE '.pi\agent\npm\node_modules'
     }
-    foreach ($s in $M.skills.include) {
+    foreach ($s in $SkillList.include) {
         $src = Join-Path $roots[$s.root] $s.path
         if (-not (Test-Path (Join-Path $src 'SKILL.md'))) { throw "skill source missing: $src" }
         $dst = Join-Path $out.Skills $s.name
@@ -308,9 +320,11 @@ try {
 
     # ── launchers + docs ──────────────────────────────────────────────────
     Write-Step "Installing launchers and docs"
-    foreach ($f in @('autorun.inf', 'README.md')) {
+    foreach ($f in @('autorun.inf', 'README.md', 'llms.txt', 'NOTICE', 'skills.example.json')) {
         Copy-Item (Join-Path $RepoRoot $f) (Join-Path $Target $f) -Force
     }
+    New-Item -ItemType Directory -Force -Path (Join-Path $Target 'assets') | Out-Null
+    Copy-Item (Join-Path $RepoRoot 'assets\banner.png') (Join-Path $Target 'assets\banner.png') -Force
     Copy-TextCrlf (Join-Path $RepoRoot 'start.bat') (Join-Path $Target 'start.bat')
     Copy-TextLf (Join-Path $RepoRoot 'start.sh') (Join-Path $Target 'start.sh')
 
@@ -321,13 +335,18 @@ try {
     Write-Ok "shims: tools/bin/pi, tools/bin/pi.cmd"
     New-Item -ItemType Directory -Force -Path (Join-Path $Target 'docs') | Out-Null
     Copy-Item (Join-Path $RepoRoot 'docs\scope.md') (Join-Path $Target 'docs\scope.md') -Force
+    Copy-Item (Join-Path $RepoRoot 'docs\manifest.schema.json') (Join-Path $Target 'docs\manifest.schema.json') -Force
     # ship the verifier so the drive can be checked from itself
     New-Item -ItemType Directory -Force -Path (Join-Path $Target 'scripts') | Out-Null
     Copy-Item (Join-Path $RepoRoot 'scripts\verify.ps1') (Join-Path $Target 'scripts\verify.ps1') -Force
     Copy-TextLf (Join-Path $RepoRoot 'scripts\verify.sh') (Join-Path $Target 'scripts\verify.sh')
     Copy-Item (Join-Path $RepoRoot 'scripts\update.ps1') (Join-Path $Target 'scripts\update.ps1') -Force
     Copy-TextLf (Join-Path $RepoRoot 'scripts\update.sh') (Join-Path $Target 'scripts\update.sh')
-    Copy-Item (Join-Path $RepoRoot 'manifest.json') (Join-Path $Target 'manifest.json') -Force
+    # the drive copy records the *effective* skill list, so update/verify can work from it
+    $MDrive = $M | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $MDrive | Add-Member -NotePropertyName skills -NotePropertyValue $SkillList -Force
+    Write-JsonNoBom (Join-Path $Target 'manifest.json') $MDrive
+    Write-Ok "manifest.json written with $(@($SkillList.include).Count) skills"
 
     # ── portable git (windows only) ───────────────────────────────────────
     if ($M.git.enabled -and -not $SkipGit) {

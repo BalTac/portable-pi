@@ -15,3 +15,6 @@ config/env.bat
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local skill selection (owner-specific; the public repo ships skills.example.json)
+skills.local.json

@@ -39,6 +39,11 @@ warn() { printf '    ! %s\n' "$*" >&2; }
 
 jget() { node -e 'const m=require(process.argv[1]);console.log(eval(process.argv[2]))' "$MANIFEST" "$1"; }
 
+# Effective skill whitelist: skills.local.json (gitignored) overrides the manifest.
+SKILLS_FILE="$REPO/manifest.json"
+[ -f "$REPO/skills.local.json" ] && SKILLS_FILE="$REPO/skills.local.json"
+sget() { node -e 'const raw=require(process.argv[1]);const m=raw.skills?raw:{skills:raw};console.log(eval(process.argv[2]))' "$SKILLS_FILE" "$1"; }
+
 NODE_VERSION="$(jget 'm.node.version')"
 PI_VERSION="$(jget 'm.pi.version')"
 RUNTIME_DIR="$(jget 'm.paths.runtimeDir')"
@@ -220,13 +225,13 @@ fi
 [ -e "$TARGET/config/env.bat" ] || cp "$REPO/config/env.example.bat" "$TARGET/config/env.bat"
 
 # ── skills ──────────────────────────────────────────────────────────────
-step "Copying $(jget 'm.skills.include.length') whitelisted skills"
-COUNT="$(jget 'm.skills.include.length')"
+step "Copying $(sget 'skills.include.length') whitelisted skills"
+COUNT="$(sget 'skills.include.length')"
 i=0
 while [ "$i" -lt "$COUNT" ]; do
-    NAME="$(jget "m.skills.include[$i].name")"
-    ROOT="$(jget "m.skills.include[$i].root")"
-    REL="$(jget "m.skills.include[$i].path")"
+    NAME="$(sget "skills.include[$i].name")"
+    ROOT="$(sget "skills.include[$i].root")"
+    REL="$(sget "skills.include[$i].path")"
     case "$ROOT" in
         agent)  SRC="${HOME}/.pi/agent/$REL" ;;
         agents) SRC="${HOME}/.agents/$REL" ;;
@@ -243,15 +248,27 @@ done
 # ── launchers + docs ────────────────────────────────────────────────────
 step "Installing launchers and docs"
 cp "$REPO/start.sh" "$REPO/start.bat" "$REPO/autorun.inf" "$REPO/README.md" "$TARGET/"
+cp "$REPO/llms.txt" "$REPO/NOTICE" "$REPO/skills.example.json" "$TARGET/"
+mkdir -p "$TARGET/assets"
+cp "$REPO/assets/banner.png" "$TARGET/assets/banner.png"
 mkdir -p "$TARGET/tools/bin" "$TARGET/docs"
 cp "$REPO/scripts/shims/pi.sh" "$TARGET/tools/bin/pi"
 cp "$REPO/scripts/shims/pi.cmd" "$TARGET/tools/bin/pi.cmd"
 chmod +x "$TARGET/tools/bin/pi" "$TARGET/start.sh" 2>/dev/null || true
-cp "$REPO/docs/scope.md" "$TARGET/docs/scope.md"
+cp "$REPO/docs/scope.md" "$REPO/docs/manifest.schema.json" "$TARGET/docs/"
 mkdir -p "$TARGET/scripts"
 cp "$REPO/scripts/verify.ps1" "$REPO/scripts/verify.sh" "$REPO/scripts/update.ps1" "$REPO/scripts/update.sh" "$TARGET/scripts/"
 chmod +x "$TARGET/scripts/verify.sh" "$TARGET/scripts/update.sh" 2>/dev/null || true
-cp "$MANIFEST" "$TARGET/manifest.json"
+# the drive copy records the effective skill list, so update/verify can work from it
+node -e '
+  const fs=require("fs");
+  const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+  const raw=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
+  m.skills = raw.skills ? raw.skills : raw;
+  fs.writeFileSync(process.argv[3], JSON.stringify(m,null,2)+"
+");
+  console.log("    manifest.json written with "+m.skills.include.length+" skills");
+' "$MANIFEST" "$SKILLS_FILE" "$TARGET/manifest.json"
 
 # ── git (windows-only payload) ──────────────────────────────────────────
 if [ "$SKIP_GIT" = 0 ]; then

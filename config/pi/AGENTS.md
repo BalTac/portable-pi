@@ -1,92 +1,90 @@
-# Portable pi — istruzioni globali
+# Portable pi — global instructions
 
-Stai girando da una chiavetta USB portatile, su una macchina che quasi
-certamente non è quella del tuo utente abituale.
+You are running from a portable USB drive, on a machine that is almost certainly **not**
+the usual computer of your user.
 
-## Contesto
+## Context
 
-- Sessioni, config, skill e cache sono **sulla chiavetta** (`config/pi/`, `temp/`).
-  Non scrivono nulla in `~/.pi/agent` dell'host: è una garanzia del launcher, non un'ipotesi.
-- Le skill disponibili sono **solo** quelle montate dalla chiavetta (`config/pi/skills`)
-  più quelle eventualmente esposte dai pacchetti che hai installato tu sul drive.
-- La macchina host può essere di un amico, un PC aziendale o una VM usa-e-getta.
+- Sessions, config, skills and caches live **on the drive** (`config/pi/`, `temp/`). They do
+  not write anything into the host's `~/.pi/agent`: that is guaranteed by the launcher, not
+  an assumption.
+- The available skills are **only** the ones mounted from the drive (`config/pi/skills`) plus
+  the ones exposed by packages you installed on the drive yourself.
+- The host may be a friend's laptop, a corporate PC or a throwaway VM.
 
-## Regole sull'host
+## Rules about the host
 
-- **Non toccare il sistema host**: niente pacchetti, niente modifiche a file di sistema,
-  niente `sudo`/elevazione, niente modifiche a `~/.bashrc`, `~/.gitconfig`, registro,
-  variabili d'ambiente permanenti o servizi.
-- **Chiedi prima** di qualunque azione distruttiva o irreversibile fuori dalla directory
-  di lavoro corrente.
-- **Lavora nella directory del progetto**, non in `$HOME`. Se serve un file temporaneo,
-  usa `$TMPDIR`/`%TEMP%`, che puntano già alla chiavetta.
-- **Git**: commit locali pure, **mai push** su un remoto senza approvazione esplicita
-  dell'utente ("Vuoi che pushi?" e attendi un "sì" chiaro). Eccezione solo se l'utente
-  ha già approvato quel push specifico.
-- **Segreti**: le credenziali vivono in `config/pi/auth.json` sulla chiavetta. Non
-  stamparle, non copiarle fuori dal drive, non metterle in un commit.
-- Se l'host sembra compromesso o i permessi sono strani, fermati e dillo all'utente
-  invece di aggirare il problema.
+- **Do not touch the host**: no package installs, no system file edits, no `sudo`
+  or privilege escalation, no changes to `~/.bashrc`, `~/.gitconfig`, the registry,
+  persistent environment variables or services.
+- **Ask before** anything destructive or irreversible outside the current working directory.
+- **Work inside the project directory**, not in `$HOME`. If you need a temporary file, use
+  `$TMPDIR`/`%TEMP%`, which already point at the drive.
+- **Git**: local commits are fine, **never push** to a remote without explicit approval from
+  the user ("shall I push?" and wait for a clear yes). The only exception is a push the user
+  already approved for that specific work.
+- **Secrets**: credentials live in `config/pi/auth.json` on the drive. Do not print them, do
+  not copy them off the drive, never put them in a commit.
+- If the host looks compromised or permissions look wrong, stop and tell the user instead of
+  working around it.
 
-## Ambiente isolato: dove va installato tutto
+## Isolated environment: everything you install goes here
 
-Regola unica: **tutto ciò che ti serve vive sul drive, dentro il tuo agent dir**.
-Il tuo `PI_CODING_AGENT_DIR` è `<drive>/config/pi`: settings, estensioni, pacchetti,
-skill, MCP e sessioni stanno lì. Non esiste un'installazione "di sistema" che ti serva.
+One rule: **what you need lives on the drive, inside your agent dir**. Your
+`PI_CODING_AGENT_DIR` is `<drive>/config/pi`: settings, extensions, packages, skills, MCP
+servers and sessions all belong there. There is no system-wide installation you need.
 
-### Skill
+### Skills
 
-- Skill nuova o modificata → `<drive>/config/pi/skills/<nome>/SKILL.md`
-  (frontmatter `name` + `description`; è la directory già montata dal launcher, quindi
-  viene caricata subito dopo `/reload`).
-- Non scrivere in `~/.agents/skills` o `~/.pi/agent/skills` dell'host: non vengono lette
-  (il launcher usa `-ns` + `--skill`) e sarebbero comunque fuori dal tuo ambiente.
-- Skill che arrivano dentro un pacchetto: si caricano da sole, non copiarle a mano.
+- New or edited skill → `<drive>/config/pi/skills/<name>/SKILL.md` (frontmatter `name` +
+  `description`). That directory is mounted by the launcher, so `/reload` picks it up.
+- Do not write into the host's `~/.agents/skills` or `~/.pi/agent/skills`: they are not read
+  (the launcher uses `-ns` + `--skill`) and they are outside your environment anyway.
+- Skills that come inside a package load on their own; do not copy them by hand.
 
-### Estensioni e pacchetti
+### Extensions and packages
 
 ```bash
-pi install npm:<pacchetto>      # scope personale = <drive>/config/pi  (CORRETTO)
-pi list                         # verifica cosa è configurato
-pi remove npm:<pacchetto>       # disinstalla
-pi -e npm:<pacchetto>           # prova per una sola invocazione (cache sul drive)
+pi install npm:<package>      # personal scope = <drive>/config/pi   (CORRECT)
+pi list                       # what is configured
+pi remove npm:<package>       # uninstall
+pi -e npm:<package>           # try for a single invocation (cache on the drive)
 ```
 
-- **Mai `-l` / `--local`**: scrive `.pi/settings.json` **nel progetto dell'host**, cioè
-  fuori dal tuo ambiente. Se un comando richiede `-l`, fermati e chiedi.
-- **Mai `npm install -g`, `pip install --user`, `apt`, `brew`, `cargo install`,
-  `winget`**: installerebbero sull'host. Se un'estensione ha bisogno di un binario
-  esterno, dillo all'utente invece di installarlo.
-- Le cache di npm e le estensioni temporanee finiscono già in `<drive>/temp` e
-  `<drive>/config/pi`: non serve reindirizzarle a mano.
-- Dopo un'installazione: `/reload` (o riavvia pi). Se l'installazione fallisce per rete,
-  **non** ripiegare su un'installazione globale: segnala l'errore.
+- **Never `-l` / `--local`**: it writes `.pi/settings.json` **into the host project**, i.e.
+  outside your environment. If a command requires `-l`, stop and ask.
+- **Never `npm install -g`, `pip install --user`, `apt`, `brew`, `cargo install`, `winget`**:
+  they install on the host. If an extension needs an external binary, tell the user instead
+  of installing it.
+- npm caches and temporary extensions already land in `<drive>/temp` and `<drive>/config/pi`;
+  no redirection needed.
+- After installing: `/reload` (or restart pi). If an install fails because of the network,
+  do **not** fall back to a global install: report the error.
 
-### Vincolo cross-platform
+### Cross-platform constraint
 
-La stessa chiavetta deve funzionare su Windows e Linux, e l'agent dir è **condiviso**
-tra i due sistemi. Quindi:
+The same drive must work on Windows and Linux, and the agent dir is **shared** between them:
 
-- preferisci estensioni **pure JS/TS**, senza binari nativi (`*.node`, `*.exe` inclusi);
-- prima di installare, controlla il `package.json`: dipendenze con `os`/`cpu` o
-  `optionalDependencies` native = probabilmente si rompono sull'altro sistema;
-- se un'estensione è inevitabilmente nativa, dillo all'utente: funzionerà solo sul
-  sistema su cui l'hai installata. Non installare due copie nella stessa cartella.
+- prefer **pure JS/TS** extensions with no native binaries (`*.node`, bundled `.exe`);
+- before installing, check the `package.json`: dependencies carrying `os`/`cpu` fields or
+  native `optionalDependencies` will probably break on the other system;
+- if an extension is unavoidably native, tell the user: it will only work on the system where
+  you installed it. Do not install two copies into the same directory.
 
-### Spazio
+### Disk space
 
-Il drive è piccolo (~1,2 GB liberi): prima di installare qualcosa di grosso controlla
-`du -sh "$PI_CODING_AGENT_DIR"` e `df -h`. Se lo spazio si esaurisce, libera
-`<drive>/temp/npm-cache` prima di tutto il resto.
+The drive is small: before installing something large, check `du -sh
+"$PI_CODING_AGENT_DIR"` and `df -h`. If space runs out, clear
+`<drive>/temp/npm-cache` first.
 
-### Manutenzione del drive
+### Drive maintenance
 
-- `bash <drive>/scripts/update.sh` — aggiorna pi (e opzionalmente Node) senza toccare
-  auth, sessioni, settings e skill locali.
-- `bash <drive>/scripts/verify.sh <drive>` — collauda che l'isolamento sia intatto.
-- Su Windows gli stessi comandi sono `scripts\update.ps1` e `scripts\verify.ps1`.
+- `bash <drive>/scripts/update.sh` — updates pi (and optionally Node) without touching auth,
+  sessions, settings or local skills.
+- `bash <drive>/scripts/verify.sh <drive>` — checks that isolation is intact.
+- On Windows the same commands are `scripts\update.ps1` and `scripts\verify.ps1`.
 
-## Lingua
+## Language
 
-Rispondi nella lingua dell'utente (di norma italiano). Sii conciso; mostra i path dei
-file quando tocchi il codice.
+Reply in the user's language (Italian by default for this user). Be concise; show file paths
+when you touch code.

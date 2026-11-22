@@ -5,61 +5,55 @@
 # portable-pi
 
 **A self-contained USB drive that runs the `pi` coding agent on Windows and Linux.**
-Nessuna installazione sull'host: colleghi, lanci, lavori, scolleghi.
+Plug it in, launch, work, unplug. Nothing is installed on the host.
 
-*portable AI coding agent · USB flash drive · no-install · self-contained ·
-Windows + Linux x64 · exFAT · agent skills · isolated agent configuration*
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey.svg)
+![node](https://img.shields.io/badge/node-24%20LTS-green.svg)
 
-Sessioni, credenziali, skill e cache restano sulla chiavetta: l'host non viene toccato
-e non c'è alcuna dipendenza da altri dispositivi della tua rete.
+Sessions, credentials, skills and caches stay on the drive. The host machine is not
+touched, and the agent needs no service running on your network: internet is enough.
 
 ```
-Windows  → doppio clic su start.bat
+Windows  → double-click start.bat
 Linux    → bash /media/$USER/PORTABLE-PI/start.sh
 ```
 
-Volume: **~430 MB**, ~7.600 file. Chiavetta consigliata: **2 GB exFAT, USB 3.0**.
+Content: ~430 MB, ~7,600 files. Recommended drive: **2 GB exFAT, USB 3.0**.
 
 ---
 
-## Quick start
+## Why
 
-**Windows** — apri la chiavetta in Esplora file, doppio clic su `start.bat`.
-Si apre pi con le skill del drive già montate.
+You are at a friend's place. Their code is broken, or you want your own agent with your
+own settings on a machine that is not yours. Installing Node.js, an agent, your skills and
+your credentials is too much friction — and leaves traces behind.
 
-**Linux** — `bash /media/$USER/PORTABLE-PI/start.sh`.
-Se il drive è montato senza bit di esecuzione, lo script te lo dice e ti stampa il
-comando di remount.
+portable-pi is a flash drive with everything already in place: a portable Node.js runtime,
+the `pi` agent with its prebundled ESM build, your skill whitelist, your credentials, and
+MinGit so the agent's shell tool works even on a Windows box without Git.
 
-```bash
-bash start.sh --shell        # invece di pi, una shell con node/git/pi nel PATH
-bash start.sh --version      # qualunque argomento viene passato a pi
-```
+## What is on the drive
 
-## Cosa contiene
-
-| Componente | Ruolo | Peso | File |
+| Component | Role | Size | Files |
 |---|---|---|---|
-| Node.js 24.22.3 LTS (win-x64 + linux-x64) | runtime portatile | 102 + 192 MB | 6.794 |
-| `pi` 1.6.0 (`dist/bundle` + `pi-tui` + `photon-node`) | l'agente | 17 MB | 343 |
-| 9 skill whitelist | istruzioni pure, nessun dispositivo esterno | 22 MB | 77 |
-| MinGit (solo Windows) | garantisce `bash` e `git` anche su host senza Git | 94 MB | 376 |
-| `config/pi/` | auth, settings, models, AGENTS.md, skills, sessions | — | — |
+| Node.js 24 LTS (win-x64 + linux-x64) | portable runtime, no install | 102 + 192 MB | 6,794 |
+| `pi` 1.6.0 (`dist/bundle` + `pi-tui` + `photon-node`) | the agent | 17 MB | 343 |
+| Skill whitelist | plain instructions, no external device needed | depends on your selection | — |
+| MinGit (Windows only) | guarantees `bash` and `git` on a bare host | 94 MB | 376 |
+| `config/pi/` | agent dir: auth, settings, models, AGENTS.md, skills, sessions | — | — |
 
-Non contiene: estensioni, MCP server, provider self-hosted, TTS, vision, contextvault,
-wiki. Il motivo esatto di ogni esclusione è in [docs/scope.md](docs/scope.md) e nel
-`manifest.json`.
+The skill list is **yours**: the public repo ships no skill names. You provide a
+`skills.local.json` (gitignored, see `skills.example.json`) and the build merges it into
+the drive's manifest.
 
-### Skill incluse
+Not included, by design: extensions, MCP servers, self-hosted providers, anything that
+requires another machine on your LAN, and anything that needs a GPU box. See
+[docs/scope.md](docs/scope.md) for the selection policy.
 
-`frontend-design`, `frontend-ui-engineering`, `impeccable`, `ponytail`,
-`ponytail-audit`, `ponytail-debt`, `ponytail-review` (queste visibili al modello) più
-`ponytail-gain` e `ponytail-help`, richiamabili solo con `/skill:ponytail-gain` e
-`/skill:ponytail-help` perché dichiarano `disable-model-invocation: true`.
+## Isolation model (verified, not promised)
 
-## Isolamento (verificato, non dichiarato)
-
-Il launcher imposta:
+The launcher sets:
 
 ```
 PI_CODING_AGENT_DIR=<usb>/config/pi
@@ -68,21 +62,27 @@ PI_SKIP_VERSION_CHECK=1   PI_TELEMETRY=0
 TMP / TEMP / TMPDIR / NPM_CONFIG_CACHE / NODE_COMPILE_CACHE / XDG_CACHE_HOME → <usb>/temp
 ```
 
-e lancia:
+and starts the agent as:
 
 ```
 pi -ns --skill <usb>/config/pi/skills
 ```
 
-`-ns` disattiva **tutte** le skill scoperte — comprese quelle dell'host in
-`~/.agents/skills` — mentre i path passati con `--skill` continuano a caricare. Quindi:
+`-ns` disables every discovered skill — including the host's `~/.agents/skills` — while the
+paths given to `--skill` keep loading. As a result:
 
-- le sessioni nascono e restano sulla chiavetta; `~/.pi/agent` non viene né letto né scritto;
-- le skill caricate sono esattamente quelle del drive;
-- estensioni, pacchetti, MCP, prompt template e temi vengono solo da `config/pi/`;
-- `HOME`/`USERPROFILE` restano quelli dell'host, così git/npm usano la config di chi ti ospita.
+- sessions are created and kept on the drive; the host `~/.pi/agent` is never read or written;
+- the skills loaded are exactly the ones on the drive (plus skills exposed by packages you
+  installed on the drive yourself);
+- extensions, packages, MCP servers, prompt templates and themes come only from `config/pi`;
+- `HOME`/`USERPROFILE` stay the host's, so git and npm still see the user config of the
+  machine you are on.
 
-Verifica automatica:
+Isolation here is **configuration-level, not a sandbox**: the agent runs with the
+operating-system permissions of the user who started it and can reach files outside the
+drive. For a real boundary use a container, a VM, or a dedicated guest account.
+
+Automated check:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\verify.ps1 -Drive E:\
@@ -91,11 +91,19 @@ powershell -ExecutionPolicy Bypass -File scripts\verify.ps1 -Drive E:\
 bash scripts/verify.sh /media/$USER/PORTABLE-PI
 ```
 
-Controlla layout, whitelist skill, assenza di riferimenti host, il launcher, un turno
-reale con marker, il set di skill effettivamente visibile al modello (deve essere quello
-del drive, senza leakage), la sessione scritta sul drive e l'hash della config host
-prima/dopo. Esce con codice ≠ 0 se qualcosa scrive fuori dal drive. `--no-model` per i
-soli controlli statici.
+It checks layout, the skill whitelist, absence of host references, the launcher, a live turn
+with a marker, the skill set actually visible to the model (must be the drive's, no leakage),
+the session landing on the drive, and a hash snapshot of the host config before/after. It
+exits non-zero if anything is written outside the drive. `--no-model` for static checks only.
+
+## Requirements
+
+| Requirement | Detail |
+|---|---|
+| Drive | 2 GB exFAT, **USB 3.0 recommended** |
+| Host | Windows 10/11 x64 or Linux x64 (glibc ≥ 2.28) |
+| Network | internet for the model (no local server needed) |
+| Build host | Windows 10 1803+ (needs `tar.exe`) **or** Linux with `curl`, `tar`, `unzip`, `node` |
 
 ## Build
 
@@ -106,182 +114,146 @@ powershell -ExecutionPolicy Bypass -File scripts\build.ps1 -Target E:\
 bash scripts/build.sh /media/$USER/PORTABLE-PI
 ```
 
-Opzioni: `-SkipGit` / `--skip-git` (niente MinGit, −94 MB), `-PiVersion x.y.z`,
-`-NodeVersion x.y.z`, `-SmokeTest` / `--smoke`, `-Force` / `--force`.
+Options: `-SkipGit`/`--skip-git` (no MinGit, −94 MB), `-PiVersion x.y.z`, `-NodeVersion x.y.z`,
+`-SmokeTest`/`--smoke`, `-Force`/`--force`.
 
-La build è idempotente: rilanciarla aggiorna pi e le skill senza toccare
-`auth.json` e `sessions/` (che restano, a meno di `-Force`).
+The build is idempotent: re-running it updates pi and the skills without touching
+`auth.json` and `sessions/` (unless you pass `-Force`).
 
-Requisiti del *build host*: Windows 10 1803+ (per `tar.exe`) oppure Linux con
-`curl`, `tar`, `unzip`, `node`.
+**Skill whitelist.** Copy `skills.example.json` to `skills.local.json` and list the skill
+directories you want (`root` is one of `agent`, `agents`, `npm`; `path` is relative to that
+root). The file is gitignored, so your selection never lands in this repository; the build
+merges it into `<drive>/manifest.json`, which is the record of what the drive contains.
 
-## Aggiornare pi o le skill
-
-Sul drive c'è uno script di aggiornamento autonomo (legge il `manifest.json` del drive,
-non serve il repo):
+## Update an existing drive
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File F:\scripts\update.ps1            # stessa versione: rinfresca runtime e skill
-powershell -File F:\scripts\update.ps1 -PiVersion latest                 # ultima versione su npm
-powershell -File F:\scripts\update.ps1 -ForcePi -Node latest             # reinstall + Node LTS
+powershell -ExecutionPolicy Bypass -File E:\scripts\update.ps1
+powershell -File E:\scripts\update.ps1 -PiVersion latest
+powershell -File E:\scripts\update.ps1 -ForcePi -Node latest
 ```
-
 ```bash
-bash /media/$USER/PORTABLE-PI/scripts/update.sh
 bash /media/$USER/PORTABLE-PI/scripts/update.sh --pi latest --node latest
 ```
 
-Cosa fa: rinfresca il runtime di pi (swap atomico delle sole directory dei pacchetti),
-opzionalmente Node, e ricopia le skill whitelist **solo se le sorgenti di quel PC
-esistono** (altrimenti le lascia invariate e te lo dice). Aggiorna le versioni nel
-`manifest.json` del drive e chiude con il collaudo statico (`verify --no-model`).
+It reads the drive's own `manifest.json` (no repo needed), swaps the pi runtime packages,
+optionally updates Node (sha256 verified), refreshes the whitelisted skills **only if this
+PC has the source folders**, updates the versions recorded in the drive manifest, then runs
+the static verifier. It never touches `auth.json`, `sessions/`, `settings.json`,
+`models.json`, `AGENTS.md` or skills you added by hand.
 
-**Non tocca mai**: `config/pi/auth.json`, `config/pi/sessions/`, `config/pi/settings.json`,
-`config/pi/models.json`, `config/pi/AGENTS.md` e le skill aggiunte a mano.
+## Installing extensions and skills (staying isolated)
 
-`pi update` resta disabilitato (`PI_SKIP_VERSION_CHECK=1`): su un'installazione portatile
-l'aggiornamento passa dallo script, non dal comando interno.
+The agent dir `config/pi` **is** the agent's environment: everything you install ends up
+there. The same rule is written in `config/pi/AGENTS.md`, which the agent reads on every
+start.
 
-## Installare estensioni e skill (restando isolati)
-
-L'agent dir `config/pi` **è** l'ambiente dell'agente: lì finisce tutto quello che installi.
-La regola è scritta anche in `config/pi/AGENTS.md`, che l'agente legge a ogni avvio.
-
-| Operazione | Comando corretto | Dove finisce |
+| Action | Correct command | Where it lands |
 |---|---|---|
-| Estensione/pacchetto | `pi install npm:<pkg>` | `config/pi/npm` + `config/pi/settings.json` |
-| Prova senza installare | `pi -e npm:<pkg>` | cache in `config/pi/tmp/extensions` |
-| Skill manuale | crea `config/pi/skills/<nome>/SKILL.md` | caricata direttamente |
-| Disinstallare | `pi remove npm:<pkg>` | — |
+| Install an extension/package | `pi install npm:<pkg>` | `config/pi/npm` + `config/pi/settings.json` |
+| Try without installing | `pi -e npm:<pkg>` | cache in `config/pi/tmp/extensions` |
+| Add a skill by hand | `config/pi/skills/<name>/SKILL.md` | loaded directly |
+| Uninstall | `pi remove npm:<pkg>` | — |
 
-Da evitare, perché scrivono fuori dal drive:
+Avoid, because they write outside the drive: `-l`/`--local` on `pi install` (writes
+`.pi/settings.json` **in the host project**), `npm install -g`, `pip install --user`,
+`apt`/`brew`/`winget`, and writing into the host's `~/.agents/skills` or `~/.pi/agent`.
 
-- `-l` / `--local` su `pi install`: scriverebbe `.pi/settings.json` **nel progetto dell'host**;
-- `npm install -g`, `pip install --user`, `apt/brew/winget/cargo install`;
-- scrivere in `~/.agents/skills` o `~/.pi/agent/skills` dell'host (non vengono nemmeno letti).
+Windows and Linux **share the same agent dir**: prefer pure JS/TS extensions. A package with
+native binaries (`*.node`, dependencies with `os`/`cpu`) only works on the system where you
+installed it.
 
-Vincolo importante: Windows e Linux **condividono lo stesso agent dir**. Preferisci
-estensioni pure JS/TS; se un pacchetto ha binari nativi (`*.node`, dipendenze con `os`/`cpu`)
-funzionerà solo sul sistema su cui l'hai installato.
+## Limits
 
-## Limiti noti
+- **exFAT and POSIX permissions.** Some distros mount the drive with `fmask=0113`, so `node`
+  is not executable. The launcher detects it and prints the fix:
+  `sudo umount … && sudo mount -o remount,umask=000 …`, or an `/etc/fstab` line with
+  `LABEL=PORTABLE-PI … exfat defaults,uid=$(id -u),umask=000 0 0`.
+- **Legacy Windows console.** The TUI needs VT support (Windows 10 1511+). On very old hosts
+  use Windows Terminal.
+- **Imagemagick-free image support** relies on a WASM module; one skill in the whitelist may
+  download its own engine on first use if you include it on a platform where no binary ships.
+- **x64 only.** ARM64 is not covered by the manifest.
+- **USB 2.0**: startup takes seconds; most of the file count is Node.
+- `rg`/`fd` are not shipped: pi downloads them into `config/pi/bin` on first use (needs
+  network) or falls back to its built-in walk.
 
-- **exFAT e permessi POSIX.** Alcune distro montano il drive con `fmask=0113`, quindi
-  `node` esce non eseguibile. Il launcher lo rileva e stampa il rimedio:
-  `sudo umount … && sudo mount -o remount,umask=000 …`, oppure una riga in `/etc/fstab`
-  con `LABEL=PORTABLE-PI … exfat defaults,uid=$(id -u),umask=000 0 0`.
-- **Console Windows legacy.** La TUI richiede VT (Windows 10 1511+). Su host molto vecchi
-  usare Windows Terminal.
-- **`impeccable`** porta l'engine win-x64; su Linux/macOS lo scarica al primo uso (serve
-  internet una volta).
-- **Solo x64.** ARM64 non è coperto dal manifest.
-- **USB 2.0**: avvio nell'ordine dei secondi; il grosso sono i 6.800 file di Node.
-- **`pi wsl`/sandbox**: non testati con questo layout; il sandbox di pi non è configurato.
+## Secrets
 
-## Segreti
+`config/pi/auth.json` holds OAuth tokens / API keys **in plaintext** on the drive. If you
+lose the drive:
 
-`config/pi/auth.json` contiene token OAuth / API key **in chiaro** sul drive.
-Se perdi la chiavetta:
+1. revoke the credentials of the providers listed in that file, or
+2. start pi elsewhere and use `/logout` for the affected providers.
 
-1. revoca le credenziali dei provider elencati nel file (openai-codex, openrouter,
-   nvidia, github-copilot, deepseek);
-2. oppure avvia pi da un'altra installazione e usa `/logout` per i provider interessati.
+`config/env.sh` and `config/env.bat` (keys via environment, e.g. `OPENMODEL_API_KEY`) are
+created by the build from the templates and are never committed.
 
-`config/env.sh` e `config/env.bat` (chiavi via ambiente, es. `OPENMODEL_API_KEY`) sono
-creati dalla build come copia dei template e non vanno mai committati.
+## Where sources, installer and temp files live
 
-## Struttura
-
-```
-PORTABLE-PI/
-├── start.bat / start.sh        launcher
-├── autorun.inf                 solo label/icona (Windows ignora AutoRun sui USB)
-├── bin/{win,linux}/node-v24.22.3-*/
-├── tools/
-│   ├── pi/node_modules/@earendil-works/{pi-coding-agent,pi-tui}, @silvia-odwyer/photon-node
-│   ├── git/mingit/             solo Windows
-│   └── bin/pi, pi.cmd          shim usabili anche fuori dal launcher
-├── config/pi/                  agent dir: auth.json, settings.json, models.json,
-│                               AGENTS.md, skills/, sessions/
-├── temp/                       TMP / cache npm+node / XDG_CACHE_HOME
-├── scripts/                    verify.ps1|sh + update.ps1|sh (collaudo e aggiornamento dal drive)
-├── docs/scope.md
-└── manifest.json               cosa è stato costruito (versione, skill, esclusioni)
-```
-
-La build (`scripts/build.ps1` / `scripts/build.sh`) e i template di `config/` vivono nel
-repo, non sul drive: sul drive c'è solo il verificatore.
-
-## Dove stanno i sorgenti, l'installer e i temporanei
-
-| Cosa | Dove | Vita |
+| Thing | Location | Lifetime |
 |---|---|---|
-| **Sorgenti + installer** (questo repo: `scripts/`, `config/`, `docs/`, `manifest.json`) | `D:\openclaw\portable-pi` | permanente, ~200 KB, sotto git |
-| **Runtime costruito** (Node, pi, MinGit, skill, auth) | la chiavetta, es. `F:\` | vive sul drive |
-| **Script di manutenzione** (`verify`, `update`) | `<drive>\scripts\` **e** il repo | copiati sulla chiavetta a ogni build |
-| **Staging di build** (download, estrazioni) | `%TEMP%\portable-pi-build-*` | **cancellato** alla fine di ogni build/update |
-| Sorgenti dei download | `nodejs.org`, `registry.npmjs.org`, `github.com/git-for-windows` | rete, nessuna cache persistente |
+| **Sources + installer** (this repo: `scripts/`, `config/`, `docs/`, `manifest.json`) | wherever you cloned it | permanent, ~200 KB, under git |
+| **Built runtime** (Node, pi, MinGit, skills, auth) | the USB drive | lives on the drive |
+| **Maintenance scripts** (`verify`, `update`) | `<drive>/scripts/` **and** this repo | copied to the drive on every build |
+| **Build staging** (downloads, extractions) | `%TEMP%\portable-pi-build-*` / `mktemp -d` | **deleted** at the end of every build/update |
+| Download sources | `nodejs.org`, `registry.npmjs.org`, `github.com/git-for-windows` | network, no persistent cache |
 
-Quindi: **niente di indispensabile sta in `temp`**. La cartella temporanea serve solo da
-area di lavoro durante la build (estrazione dei tarball, dereferenziazione dei symlink,
-verifica degli sha256) e viene rimossa anche in caso di errore (`finally`).
+Nothing essential lives in a temp directory. The repo carries no binaries and no secrets: it
+rebuilds from scratch with `scripts/build.ps1` or `scripts/build.sh` starting from
+`manifest.json`.
 
-Il repo non contiene né binari né segreti: si ricostruisce da zero con `scripts/build.ps1`
-o `scripts/build.sh` a partire da `manifest.json`, quindi è leggero e sicuro da pubblicare.
-
-## Layout del repo
+## Repository layout
 
 ```
 portable-pi/
-├── manifest.json              cosa costruire: versioni, pacchetti, skill, payload git
-├── README.md                  questo file
-├── LICENSE                    MIT
-├── start.bat / start.sh       launcher copiati sul drive
-├── autorun.inf                label/icona del volume
+├── manifest.json              what to build: versions, packages, git payload
+├── skills.example.json        shape of the skill whitelist (copy to skills.local.json)
+├── assets/banner.png          repository banner
+├── README.md · llms.txt · NOTICE
+├── start.bat / start.sh       launchers copied to the drive
+├── autorun.inf                volume label/icon (Windows ignores AutoRun on USB)
 ├── config/
-│   ├── pi/                    template dell'agent dir: settings, models, AGENTS.md
-│   └── env.example.{sh,bat}   chiavi API opzionali
+│   ├── pi/                    agent-dir templates: settings, models, AGENTS.md
+│   └── env.example.{sh,bat}   optional API keys
 ├── scripts/
-│   ├── build.ps1 / build.sh   costruiscono il drive dal manifest
-│   ├── update.ps1 / update.sh aggiornano un drive esistente
-│   ├── verify.ps1 / verify.sh collaudano l'isolamento
-│   └── shims/                 pi / pi.cmd che il launcher mette nel PATH
+│   ├── build.ps1 / build.sh   build a drive from the manifest
+│   ├── update.ps1 / update.sh update an existing drive
+│   ├── verify.ps1 / verify.sh assert the isolation guarantees
+│   └── shims/                 pi / pi.cmd put on PATH by the launcher
 ├── docs/
-│   ├── scope.md               cosa entra e cosa no, con il motivo
-│   └── manifest.schema.json   schema del manifest
-└── .github/                   (opzionale) CI, template issue
+│   ├── scope.md               selection policy: what ships and what cannot
+│   └── manifest.schema.json   manifest schema
+└── .github/workflows/         validation CI
 ```
 
-## Crediti e attribuzione
+## Provenance and attribution
 
-Questo progetto è un **rewrite per `pi`** delle idee e del layout USB di
-[`bnovik0v/portable-agent-usb`](https://github.com/bnovik0v/portable-agent-usb)
-(MIT, 2026), che porta Claude Code e Codex su chiavetta.
+This project is a **rewrite for `pi`** of the ideas and USB layout of
+[`bnovik0v/portable-agent-usb`](https://github.com/bnovik0v/portable-agent-usb) (MIT, 2026),
+which ships Claude Code and Codex on a stick.
 
-**Non è un fork git**: non condivide commit con l'originale e nessun file sorgente è
-copiato alla lettera. Cosa viene dall'originale e cosa è nuovo è elencato in
-[`NOTICE`](NOTICE), insieme al testo MIT dell'upstream.
+**It is not a git fork**: no commit is shared and no source file is copied verbatim. What
+came from the original and what is new is listed in [`NOTICE`](NOTICE), together with the
+upstream MIT text.
 
-Altre attribuzioni:
+Other attributions:
 
-| Componente | Licenza |
+| Component | License |
 |---|---|
 | `pi` / `@earendil-works/*` | MIT |
 | `@silvia-odwyer/photon-node` | Apache-2.0 |
 | Node.js | MIT (OpenJS Foundation) |
-| MinGit / Git for Windows | GPL-2.0 — scaricato a build time, non incluso nel repo; sul drive resta il suo `LICENSE.txt` |
-| skill `ponytail*` | MIT (`@bacnh85`) |
-| skill `impeccable`, `frontend-ui-engineering`, `frontend-design` | vedi i rispettivi `SKILL.md` |
+| MinGit / Git for Windows | GPL-2.0 — downloaded at build time, not in this repo; its `LICENSE.txt` stays on the drive |
+| third-party skills | see each skill's `SKILL.md` |
 
-## Per crawler e agenti LLM
+## For crawlers and LLM agents
 
-- [`llms.txt`](llms.txt) — riassunto machine-readable del progetto (cos'è, modello di
-  isolamento, parole chiave, dove stanno build e verifica).
-- [`manifest.json`](manifest.json) — fonte di verità su cosa viene costruito e cosa è
-  deliberatamente escluso.
-- [`docs/scope.md`](docs/scope.md) — per ogni skill esclusa, la dipendenza che la rende
-  non portabile.
+- [`llms.txt`](llms.txt) — machine-readable summary: what it is, isolation model, keywords,
+  where build and verification live.
+- [`manifest.json`](manifest.json) — source of truth for what gets built.
+- [`docs/scope.md`](docs/scope.md) — the selection policy for skills.
 
-## Licenza
+## License
 
-MIT — vedi [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

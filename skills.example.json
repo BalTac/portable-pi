@@ -1,0 +1,17 @@
+{
+  "$comment": "Example skill whitelist. copy to skills.local.json (gitignored) and edit. Skill names are only examples: any directory containing a SKILL.md works.",
+  "include": [
+    {
+      "name": "example-skill",
+      "root": "agent",
+      "path": "skills/example-skill",
+      "reason": "root 'agent' resolves to <home>/.pi/agent, 'agents' to <home>/.agents, 'npm' to <home>/.pi/agent/npm/node_modules"
+    }
+  ],
+  "exclude": [
+    {
+      "name": "example-skill-not-portable",
+      "reason": "why it cannot be shipped: talks to a service on your LAN, needs a GPU box, needs a private package, or depends on a host path"
+    }
+  ]
+}
