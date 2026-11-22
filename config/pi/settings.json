@@ -1,0 +1,9 @@
+{
+  "theme": "dark",
+  "defaultProvider": "deepseek",
+  "defaultModel": "deepseek-flash",
+  "defaultThinkingLevel": "high",
+  "compaction": {
+    "keepRecentTokens": 60000
+  }
+}

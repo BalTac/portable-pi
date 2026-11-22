@@ -1,0 +1,21 @@
+{
+  "providers": {
+    "openmodel": {
+      "name": "OpenModel.ai",
+      "baseUrl": "https://api.openmodel.ai/v1",
+      "apiKey": "$OPENMODEL_API_KEY",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash (Free)",
+          "reasoning": false,
+          "input": ["text"],
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+          "contextWindow": 1000000,
+          "maxTokens": 8192
+        }
+      ]
+    }
+  }
+}

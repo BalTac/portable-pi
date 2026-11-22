@@ -1,0 +1,11 @@
+[AutoRun]
+label=PORTABLE-PI
+
+[Content]
+MusicFiles=false
+PictureFiles=false
+VideoFiles=false
+
+; Modern Windows (7+) ignores AutoRun programs on USB drives for security.
+; This file only sets the volume label and icon in File Explorer.
+; The user launches the drive by double-clicking start.bat.
