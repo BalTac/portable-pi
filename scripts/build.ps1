@@ -259,12 +259,16 @@ try {
         New-Item -ItemType Directory -Force -Path (Join-Path $out.Temp $d) | Out-Null
     }
 
-    foreach ($f in @('settings.json', 'models.json', 'AGENTS.md')) {
+    foreach ($f in @('settings.json', 'models.json')) {
         $src = Join-Path $RepoRoot "config\pi\$f"
         $dst = Join-Path $out.Config $f
         if ((Test-Path $dst) -and -not $Force) { Write-Ok "$f kept (use -Force to overwrite)" }
         else { Copy-Item $src $dst -Force; Write-Ok "$f written" }
     }
+    # AGENTS.md is repo-owned instruction content: always refreshed so an updated
+    # rule set reaches an existing drive on the next build/update.
+    Copy-Item (Join-Path $RepoRoot 'config\pi\AGENTS.md') (Join-Path $out.Config 'AGENTS.md') -Force
+    Write-Ok 'AGENTS.md written'
 
     $authSrc = Join-Path $env:USERPROFILE '.pi\agent\auth.json'
     $authDst = Join-Path $out.Config 'auth.json'
@@ -321,6 +325,8 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $Target 'scripts') | Out-Null
     Copy-Item (Join-Path $RepoRoot 'scripts\verify.ps1') (Join-Path $Target 'scripts\verify.ps1') -Force
     Copy-TextLf (Join-Path $RepoRoot 'scripts\verify.sh') (Join-Path $Target 'scripts\verify.sh')
+    Copy-Item (Join-Path $RepoRoot 'scripts\update.ps1') (Join-Path $Target 'scripts\update.ps1') -Force
+    Copy-TextLf (Join-Path $RepoRoot 'scripts\update.sh') (Join-Path $Target 'scripts\update.sh')
     Copy-Item (Join-Path $RepoRoot 'manifest.json') (Join-Path $Target 'manifest.json') -Force
 
     # ── portable git (windows only) ───────────────────────────────────────

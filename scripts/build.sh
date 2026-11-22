@@ -197,11 +197,13 @@ step "Writing config"
 mkdir -p "$TARGET/$AGENT_DIR/sessions" "$TARGET/$SKILLS_DIR" \
          "$TARGET/$TEMP_DIR/npm-cache" "$TARGET/$TEMP_DIR/node-cache" "$TARGET/$TEMP_DIR/cache"
 
-for f in settings.json models.json AGENTS.md; do
+for f in settings.json models.json; do
     src="$REPO/config/pi/$f"; dst="$TARGET/$AGENT_DIR/$f"
     if [ -e "$dst" ] && [ "$FORCE" = 0 ]; then ok "$f kept (use --force to overwrite)"
     else cp "$src" "$dst"; ok "$f written"; fi
 done
+# AGENTS.md is repo-owned: always refreshed so an updated rule set reaches the drive
+cp "$REPO/config/pi/AGENTS.md" "$TARGET/$AGENT_DIR/AGENTS.md"; ok "AGENTS.md written"
 
 AUTH_SRC="${HOME}/.pi/agent/auth.json"
 AUTH_DST="$TARGET/$AGENT_DIR/auth.json"
@@ -247,8 +249,8 @@ cp "$REPO/scripts/shims/pi.cmd" "$TARGET/tools/bin/pi.cmd"
 chmod +x "$TARGET/tools/bin/pi" "$TARGET/start.sh" 2>/dev/null || true
 cp "$REPO/docs/scope.md" "$TARGET/docs/scope.md"
 mkdir -p "$TARGET/scripts"
-cp "$REPO/scripts/verify.ps1" "$REPO/scripts/verify.sh" "$TARGET/scripts/"
-chmod +x "$TARGET/scripts/verify.sh" 2>/dev/null || true
+cp "$REPO/scripts/verify.ps1" "$REPO/scripts/verify.sh" "$REPO/scripts/update.ps1" "$REPO/scripts/update.sh" "$TARGET/scripts/"
+chmod +x "$TARGET/scripts/verify.sh" "$TARGET/scripts/update.sh" 2>/dev/null || true
 cp "$MANIFEST" "$TARGET/manifest.json"
 
 # ── git (windows-only payload) ──────────────────────────────────────────

@@ -110,10 +110,52 @@ Requisiti del *build host*: Windows 10 1803+ (per `tar.exe`) oppure Linux con
 
 ## Aggiornare pi o le skill
 
-`pi update` è disabilitato di proposito (`PI_SKIP_VERSION_CHECK=1`): su un'installazione
-portatile l'aggiornamento si fa **ricostruendo la chiavetta**. Cambia `pi.version` (o
-`node.version`, o la lista skill) nel `manifest.json`, rilancia la build. Auth e sessioni
-restano dov'erano.
+Sul drive c'è uno script di aggiornamento autonomo (legge il `manifest.json` del drive,
+non serve il repo):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File F:\scripts\update.ps1            # stessa versione: rinfresca runtime e skill
+powershell -File F:\scripts\update.ps1 -PiVersion latest                 # ultima versione su npm
+powershell -File F:\scripts\update.ps1 -ForcePi -Node latest             # reinstall + Node LTS
+```
+
+```bash
+bash /media/$USER/PORTABLE-PI/scripts/update.sh
+bash /media/$USER/PORTABLE-PI/scripts/update.sh --pi latest --node latest
+```
+
+Cosa fa: rinfresca il runtime di pi (swap atomico delle sole directory dei pacchetti),
+opzionalmente Node, e ricopia le skill whitelist **solo se le sorgenti di quel PC
+esistono** (altrimenti le lascia invariate e te lo dice). Aggiorna le versioni nel
+`manifest.json` del drive e chiude con il collaudo statico (`verify --no-model`).
+
+**Non tocca mai**: `config/pi/auth.json`, `config/pi/sessions/`, `config/pi/settings.json`,
+`config/pi/models.json`, `config/pi/AGENTS.md` e le skill aggiunte a mano.
+
+`pi update` resta disabilitato (`PI_SKIP_VERSION_CHECK=1`): su un'installazione portatile
+l'aggiornamento passa dallo script, non dal comando interno.
+
+## Installare estensioni e skill (restando isolati)
+
+L'agent dir `config/pi` **è** l'ambiente dell'agente: lì finisce tutto quello che installi.
+La regola è scritta anche in `config/pi/AGENTS.md`, che l'agente legge a ogni avvio.
+
+| Operazione | Comando corretto | Dove finisce |
+|---|---|---|
+| Estensione/pacchetto | `pi install npm:<pkg>` | `config/pi/npm` + `config/pi/settings.json` |
+| Prova senza installare | `pi -e npm:<pkg>` | cache in `config/pi/tmp/extensions` |
+| Skill manuale | crea `config/pi/skills/<nome>/SKILL.md` | caricata direttamente |
+| Disinstallare | `pi remove npm:<pkg>` | — |
+
+Da evitare, perché scrivono fuori dal drive:
+
+- `-l` / `--local` su `pi install`: scriverebbe `.pi/settings.json` **nel progetto dell'host**;
+- `npm install -g`, `pip install --user`, `apt/brew/winget/cargo install`;
+- scrivere in `~/.agents/skills` o `~/.pi/agent/skills` dell'host (non vengono nemmeno letti).
+
+Vincolo importante: Windows e Linux **condividono lo stesso agent dir**. Preferisci
+estensioni pure JS/TS; se un pacchetto ha binari nativi (`*.node`, dipendenze con `os`/`cpu`)
+funzionerà solo sul sistema su cui l'hai installato.
 
 ## Limiti noti
 
@@ -155,7 +197,7 @@ PORTABLE-PI/
 ├── config/pi/                  agent dir: auth.json, settings.json, models.json,
 │                               AGENTS.md, skills/, sessions/
 ├── temp/                       TMP / cache npm+node / XDG_CACHE_HOME
-├── scripts/                    verify.ps1 + verify.sh (per collaudare il drive da sé)
+├── scripts/                    verify.ps1|sh + update.ps1|sh (collaudo e aggiornamento dal drive)
 ├── docs/scope.md
 └── manifest.json               cosa è stato costruito (versione, skill, esclusioni)
 ```
