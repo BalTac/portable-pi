@@ -105,7 +105,7 @@ exec "`$basedir/node" "`$basedir/$JsRelative" "`$@"
 # Text files meant for Linux must keep LF endings end-to-end (git on Windows may CRLF them).
 function Copy-TextLf([string]$Source, [string]$Dest) {
     $dir = Split-Path -Parent $Dest
-    if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
     $text = [IO.File]::ReadAllText($Source) -replace "`r`n", "`n"
     [IO.File]::WriteAllBytes($Dest, [Text.Encoding]::UTF8.GetBytes($text))
 }
@@ -113,9 +113,27 @@ function Copy-TextLf([string]$Source, [string]$Dest) {
 # Batch files must be CRLF: cmd.exe misparses LF-only multi-line if/label blocks.
 function Copy-TextCrlf([string]$Source, [string]$Dest) {
     $dir = Split-Path -Parent $Dest
-    if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
     $text = ([IO.File]::ReadAllText($Source) -replace "`r`n", "`n") -replace "`n", "`r`n"
     [IO.File]::WriteAllBytes($Dest, [Text.Encoding]::UTF8.GetBytes($text))
+}
+
+# exFAT/FAT cannot hold symlinks. The linux node tarball has a few (bin/npm,
+# bin/npx, bin/corepack): replace them with the real file before copying out.
+function Resolve-ReparsePoints([string]$Root) {
+    $links = @(Get-ChildItem $Root -Recurse -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint })
+    foreach ($l in $links) {
+        $raw = $l.Target
+        if ($raw -is [array]) { $raw = $raw[0] }
+        $resolved = if ($raw -and [IO.Path]::IsPathRooted($raw)) { $raw } else { Join-Path $l.DirectoryName $raw }
+        $resolved = [IO.Path]::GetFullPath($resolved)
+        Remove-Item -LiteralPath $l.FullName -Force -Recurse -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $resolved) {
+            Copy-Item -LiteralPath $resolved -Destination $l.FullName -Recurse -Force
+        }
+    }
+    if ($links.Count -gt 0) { Write-Ok "$($links.Count) symlink(s) dereferenced for a FAT/exFAT target" }
 }
 
 function Copy-Subset([string]$Source, [string]$Dest, [string[]]$Keep) {
@@ -185,6 +203,7 @@ try {
                 $extract = Join-Path $Staging "x-$($t.id)"
                 Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
                 Expand-ArchiveAny $archive $extract
+                Resolve-ReparsePoints $extract
                 $top = Get-ChildItem $extract -Directory | Select-Object -First 1
                 if (-not $top) { throw "unexpected archive layout for $archiveName" }
                 Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue
@@ -317,7 +336,12 @@ try {
             Remove-Item $gitDir -Recurse -Force -ErrorAction SilentlyContinue
             New-Item -ItemType Directory -Force -Path $gitDir | Out-Null
             Write-Step "Extracting MinGit"
-            Expand-ArchiveAny $zip $gitDir
+            # extract on NTFS then copy: bsdtar cannot restore the MinGit timestamps
+            # directly on FAT/exFAT ("Can't restore time: Invalid argument")
+            $stageGit = Join-Path $Staging 'mingit'
+            Remove-Item $stageGit -Recurse -Force -ErrorAction SilentlyContinue
+            Expand-ArchiveAny $zip $stageGit
+            Copy-Item -Path (Join-Path $stageGit '*') -Destination $gitDir -Recurse -Force
 
             # MinGit ships sh.exe (which IS GNU bash) but not bash.exe, and pi looks
             # for bash.exe by name. Same binary, different argv[0].

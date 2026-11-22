@@ -129,6 +129,12 @@ if [ "$SKIP_NODE" = 0 ]; then
             ok "sha256 ok"
             rm -rf "$STAGING/x-$ID" "$DEST"
             extract_archive "$STAGING/$ARCHIVE" "$STAGING/x-$ID"
+            # FAT/exFAT cannot hold symlinks (bin/npm, bin/npx, bin/corepack): dereference
+            find "$STAGING/x-$ID" -type l -print0 2>/dev/null | while IFS= read -r -d "" link; do
+                target="$(readlink -f "$link" 2>/dev/null || true)"
+                rm -f "$link"
+                [ -n "$target" ] && [ -e "$target" ] && cp -RL "$target" "$link"
+            done
             TOP="$(find "$STAGING/x-$ID" -mindepth 1 -maxdepth 1 -type d | head -1)"
             mkdir -p "$(dirname "$DEST")"
             mv "$TOP" "$DEST"
