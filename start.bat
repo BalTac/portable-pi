@@ -25,7 +25,14 @@ if exist "%USB%\tools\git\mingit\usr\bin\bash.exe" (
 REM ── agent dir: everything stays on the drive ─────────────────────────
 set "PI_CODING_AGENT_DIR=%USB%\config\pi"
 set "PI_CODING_AGENT_SESSION_DIR=%USB%\config\pi\sessions"
+REM llm-wiki: the personal vault lives on the drive, never in the host's ~/.llm-wiki
+set "WIKI_HOME=%USB%\workspace"
 set "PI_SKIP_VERSION_CHECK=1"
+REM exFAT has no ownership: git refuses a repo it does not own. This keeps the
+REM exception in the environment instead of writing to the host's ~/.gitconfig.
+set "GIT_CONFIG_COUNT=1"
+set "GIT_CONFIG_KEY_0=safe.directory"
+set "GIT_CONFIG_VALUE_0=*"
 set "PI_TELEMETRY=0"
 
 REM ── no traces: temp/cache on the drive ───────────────────────────────
@@ -61,11 +68,11 @@ if /i "%~1"=="--shell" (
     echo   exit     to close
     echo  ======================================================
     echo.
-    cmd /k "cd /d "%USERPROFILE%""
+    cmd /k "cd /d "%USB%\workspace""
     exit /b 0
 )
 
-cd /d "%USERPROFILE%"
+cd /d "%USB%\workspace"
 "%USB%\tools\bin\pi.cmd" %*
 set "RC=%ERRORLEVEL%"
 if not "%RC%"=="0" (

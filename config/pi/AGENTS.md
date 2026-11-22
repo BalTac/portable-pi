@@ -8,8 +8,8 @@ the usual computer of your user.
 - Sessions, config, skills and caches live **on the drive** (`config/pi/`, `temp/`). They do
   not write anything into the host's `~/.pi/agent`: that is guaranteed by the launcher, not
   an assumption.
-- The available skills are **only** the ones mounted from the drive (`config/pi/skills`) plus
-  the ones exposed by packages you installed on the drive yourself.
+- The available skills are **only** the ones mounted from the drive (`config/pi/skills`),
+  including the skills that the vendored packages expose (the build mirrors them there).
 - The host may be a friend's laptop, a corporate PC or a throwaway VM.
 
 ## Rules about the host
@@ -40,7 +40,8 @@ servers and sessions all belong there. There is no system-wide installation you 
   `description`). That directory is mounted by the launcher, so `/reload` picks it up.
 - Do not write into the host's `~/.agents/skills` or `~/.pi/agent/skills`: they are not read
   (the launcher uses `-ns` + `--skill`) and they are outside your environment anyway.
-- Skills that come inside a package load on their own; do not copy them by hand.
+- Skills that come inside a vendored package are already mirrored into `config/pi/skills` by
+  the build; do not copy them again by hand.
 
 ### Extensions and packages
 
@@ -70,6 +71,33 @@ The same drive must work on Windows and Linux, and the agent dir is **shared** b
   native `optionalDependencies` will probably break on the other system;
 - if an extension is unavoidably native, tell the user: it will only work on the system where
   you installed it. Do not install two copies into the same directory.
+
+### Vendored packages (read this first)
+
+The drive ships its extensions **vendored**: `config/pi/packages/node_modules/<name>`, declared
+in `config/pi/settings.json` as `./packages/node_modules/<name>`. They start offline and their
+paths are drive-relative. `pi install` on a running drive works for a test, but a rebuild will
+prune it unless it is added to the owner's `packages[]` profile. Prefer telling the user
+"add it to the profile and rebuild" over installing into a drive that will be rebuilt.
+
+Extensions that spawn child pi processes (`pi-subagents`) need the host SDK closure under
+`<drive>/tools/pi/node_modules`. The build vendors it when the profile marks the package
+`requiresHostSdk: true`; if a child fails with `ENOENT .../pi-coding-agent/dist/index.js`, that
+closure is missing: tell the user to rebuild, do not try to install it yourself.
+
+Git on this drive: exFAT has no ownership, so the launcher exports
+`GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=*`. Use that instead of editing the host's
+`~/.gitconfig` (which the rules above forbid).
+
+`-ns` also disables package skill discovery, which is why package skills are mirrored into
+`config/pi/skills`. Keep that invariant if you add a package by hand.
+
+### LLM Wiki
+
+The personal vault follows `WIKI_HOME=<drive>/workspace`, so it lives in
+`<drive>/workspace/.llm-wiki`. Do not create or read `~/.llm-wiki` on the host. Embeddings are
+optional and unconfigured: lexical recall is the supported mode on this drive, and no
+embedding server exists. Do not install `@tobilu/qmd` to "fix" search.
 
 ### Disk space
 

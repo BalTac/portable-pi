@@ -19,6 +19,8 @@ Isolation is configuration-level, not a sandbox:
 
 - `PI_CODING_AGENT_DIR=<drive>/config/pi` — settings, extensions, packages,
   MCP servers, skills, sessions all live on the drive.
+- `WIKI_HOME=<drive>/workspace` — the llm-wiki personal vault stays on the drive
+  (embeddings optional, lexical recall works with no embedding server).
 - `PI_SKIP_VERSION_CHECK=1`, `PI_TELEMETRY=0`, temp and npm/node caches on the drive.
 - the agent is launched as `pi -ns --skill <drive>/config/pi/skills`, which
   disables every discovered skill (including the host's `~/.agents/skills`) while
@@ -43,8 +45,14 @@ reproducible agent environment, isolated agent configuration, LLM agent on a sti
 - `scripts/verify.ps1` / `scripts/verify.sh` assert the isolation guarantees and
   fail if anything is written outside the drive.
 
-The public repository ships no skill names: the owner's whitelist lives in
-`skills.local.json` (gitignored) and is merged into `<drive>/manifest.json` at build time.
+The public repository is pi-only: it ships no skill names and no extensions. The
+owner's drive profile lives in `skills.local.json` (gitignored) with `include`
+(skills), `packages` (extensions) and `settings`, and is merged into
+`<drive>/manifest.json` at build time. `scripts/vendor-packages.mjs` copies each
+package plus its dependency closure onto the drive, so nothing is installed at
+run time and drive paths stay relative. A package marked `requiresHostSdk` (such
+as `pi-subagents`, which spawns child pi processes) additionally vendors the host
+SDK closure into `tools/pi/node_modules`.
 
 ## Provenance and license
 
@@ -55,5 +63,6 @@ this is a rewrite for pi, not a git fork. See `NOTICE`.
 
 - `manifest.json` — what gets built, with versions and the skill whitelist
 - `README.md` — full documentation
-- `docs/scope.md` — included/excluded skills and why
+- `docs/scope.md` — selection policy: what ships and what cannot
+- `docs/workspace.md` — the drive workspace and the llm-wiki vault layout
 - `config/pi/AGENTS.md` — the instructions the agent reads on the drive

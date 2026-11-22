@@ -70,7 +70,7 @@ else pass "recorded root matches the current one: $CURRENT_ROOT"; fi
 
 # ── 2. skills whitelist ─────────────────────────────────────────────────
 head_ "Skills whitelist"
-EXPECTED="$(jget 'm.skills.include.map(s=>s.name).join(" ")')"
+EXPECTED="$(jget 'm.skills.include.map(s=>s.name).concat(m.packageSkills||[]).join(" ")')"
 PRESENT="$(find "$SKILLS_DIR" -maxdepth 2 -name SKILL.md -printf '%h\n' 2>/dev/null | xargs -r -n1 basename | sort)"
 for n in $EXPECTED; do
     printf '%s\n' "$PRESENT" | grep -qx "$n" && pass "$n" || fail "$n missing on the drive"
@@ -81,8 +81,41 @@ EXTRA="$(comm -13 <(printf '%s\n' $EXPECTED | sort) <(printf '%s\n' "$PRESENT"))
 # ── 3. no host references in shipped config/skills ──────────────────────
 head_ "No host-specific references"
 LEAKS="$(grep -rlE '[A-Za-z]:\\Users\\|/mnt/[a-z]/|/home/[a-z]|192\.168\.' "$AGENT_DIR" "$SKILLS_DIR" \
-    --include='*.json' --include='*.md' --exclude=auth.json --exclude=models-store.json 2>/dev/null || true)"
+    --include='*.json' --include='*.md' --exclude=auth.json --exclude=models-store.json \
+    --exclude-dir=packages 2>/dev/null || true)"
 [ -z "$LEAKS" ] && pass "no host paths or LAN endpoints" || fail "host references in: $LEAKS"
+
+# ── 3b. vendored packages, no SearXNG, vault on the drive ───────────────
+head_ "Third-party packages"
+PKG_ROOT="$AGENT_DIR/packages/node_modules"
+PKG_COUNT="$(jget '(m.packages||[]).length')"
+if [ "$PKG_COUNT" != "0" ]; then
+    i=0
+    while [ "$i" -lt "$PKG_COUNT" ]; do
+        NAME="$(jget "m.packages[$i].name")"
+        WANT="$(jget "m.packages[$i].version")"
+        if [ -f "$PKG_ROOT/$NAME/package.json" ]; then
+            HAVE="$(node -e 'console.log(require(process.argv[1]).version)' "$PKG_ROOT/$NAME/package.json")"
+            [ "$HAVE" = "$WANT" ] && pass "$NAME@$HAVE" || fail "$NAME version mismatch: drive $HAVE, manifest $WANT"
+        else fail "$NAME missing under config/pi/packages"; fi
+        grep -qF "./packages/node_modules/$NAME" "$AGENT_DIR/settings.json" 2>/dev/null \
+            || fail "settings.json does not declare ./packages/node_modules/$NAME"
+        i=$((i + 1))
+    done
+    if grep -qiE 'searxng|192\.168\.' "$AGENT_DIR/settings.json" "$AGENT_DIR/web-search.json" 2>/dev/null; then
+        fail "web-search/settings reference SearXNG or a LAN address"
+    else pass "web-search.json without SearXNG/LAN"; fi
+fi
+NEEDS_HOST="$(jget '(m.packages||[]).some(p=>p.requiresHostSdk)?"1":"0"')"
+if [ "$NEEDS_HOST" = "1" ]; then
+    RTNM="$DRIVE/$(jget 'm.paths.runtimeDir')/node_modules"
+    for rel in @earendil-works/pi-coding-agent/dist/index.js @earendil-works/pi-agent-core/package.json @earendil-works/pi-ai/package.json typebox/package.json; do
+        if [ -f "$RTNM/$rel" ] || [ -f "$RTNM/@earendil-works/pi-coding-agent/node_modules/$rel" ]; then
+            pass "host SDK: $rel"
+        else fail "host SDK missing for child processes: tools/pi/node_modules/$rel"; fi
+    done
+fi
+[ -d "$DRIVE/workspace" ] && pass "workspace present (WIKI_HOME)" || fail "workspace missing (llm-wiki vault home)"
 
 # ── 4. host baseline ────────────────────────────────────────────────────
 head_ "Host isolation"
@@ -144,7 +177,8 @@ SKILLS: <comma separated names of the skills available to you>" 2>&1 || true)"
         || fail "skills not reported: $MISSING"
 
     LEAKED=""
-    for n in $(jget 'm.skills.exclude.map(s=>s.name).join(" ")'); do
+    # package-provided skills are excluded as *standalone* copies but are legitimately visible
+    for n in $(jget 'm.skills.exclude.map(s=>s.name).filter(n=>!(m.packageSkills||[]).includes(n)).join(" ")'); do
         printf '%s' "$REPLY" | grep -qE "(^|[[:space:],])$n($|[[:space:],.])" && LEAKED="$LEAKED $n"
     done
     [ -z "$LEAKED" ] && pass "no host/discovered skill leaked in" || fail "leaked skills: $LEAKED"

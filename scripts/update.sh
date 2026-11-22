@@ -207,6 +207,38 @@ if [ "$SKIP_SKILLS" = 0 ]; then
     fi
 fi
 
+# ── vendored packages (only when this PC has the sources) ──────────────
+PKG_COUNT="$(jget '(m.packages||[]).length')"
+if [ "$SKIP_SKILLS" = 0 ] && [ "$PKG_COUNT" != "0" ]; then
+    MISSING_PKG=""
+    i=0
+    while [ "$i" -lt "$PKG_COUNT" ]; do
+        [ -f "$HOME/.pi/agent/npm/node_modules/$(jget "m.packages[$i].name")/package.json" ] \
+            || MISSING_PKG="$MISSING_PKG $(jget "m.packages[$i].name")"
+        i=$((i + 1))
+    done
+    if [ -z "$MISSING_PKG" ]; then
+        step "Refreshing $PKG_COUNT vendored packages"
+        TMP_PROFILE="$(mktemp)"
+        node -e 'const fs=require("fs");const m=require(process.argv[1]);fs.writeFileSync(process.argv[2],JSON.stringify({packages:m.packages||[]},null,2))' \
+            "$DRIVE/manifest.json" "$TMP_PROFILE"
+        node "$DRIVE/scripts/vendor-packages.mjs" --profile "$TMP_PROFILE" \
+            --dest "$DRIVE/$(jget 'm.paths.agentDir')/packages" --prune
+        rm -f "$TMP_PROFILE"
+        # refresh package-provided skills (mirrored into config/pi/skills); never deletes
+        for sk in "$DRIVE/$(jget 'm.paths.agentDir')/packages/node_modules"/*/skills/* \
+                  "$DRIVE/$(jget 'm.paths.agentDir')/packages/node_modules"/@*/*/skills/*; do
+            [ -f "$sk/SKILL.md" ] || continue
+            NAME="$(basename "$sk")"
+            rm -rf "$DRIVE/$(jget 'm.paths.skillsDir')/$NAME"
+            cp -R "$sk" "$DRIVE/$(jget 'm.paths.skillsDir')/$NAME"
+            ok "package skill $NAME"
+        done
+    else
+        warn "package sources not available on this machine:$MISSING_PKG - packages left untouched"
+    fi
+fi
+
 if [ "$NO_VERIFY" = 0 ] && [ -f "$DRIVE/scripts/verify.sh" ]; then
     step "Verification (no model call)"
     bash "$DRIVE/scripts/verify.sh" "$DRIVE" --no-model || { echo "verify reported errors" >&2; exit 1; }

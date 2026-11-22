@@ -46,6 +46,28 @@ jobs:
             || { echo "a secret file is tracked"; exit 1; }
           echo "no secret files tracked"
 
+      - name: base ships no third-party skills or extensions
+        run: |
+          if git ls-files --error-unmatch skills.local.json >/dev/null 2>&1; then
+            echo "skills.local.json must never be tracked: it is the owner's private drive profile"; exit 1
+          fi
+          node -e '
+            const fs = require("fs");
+            const s = JSON.parse(fs.readFileSync("config/pi/settings.json", "utf8"));
+            if (Array.isArray(s.packages) && s.packages.length) {
+              console.error("config/pi/settings.json declares packages: the base must stay pi-only"); process.exit(1);
+            }
+            for (const p of ["config/pi/packages", "config/pi/skills", "config/pi/extensions"]) {
+              if (fs.existsSync(p) && fs.readdirSync(p).length) {
+                console.error(p + " is not empty: third-party resources are drive-profile only"); process.exit(1);
+              }
+            }
+            const ex = require("./skills.example.json");
+            const bad = (ex.packages || []).filter(p => !p.name || !p.spec || !p.reason || p.reason.length < 10);
+            if (bad.length) { console.error("example package entry incomplete", bad); process.exit(1); }
+            console.log("base repo: no third-party skills/extensions (profile-only)");
+          '
+
   powershell:
     runs-on: windows-latest
     steps:

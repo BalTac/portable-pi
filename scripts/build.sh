@@ -162,6 +162,24 @@ fi
 NM="$TARGET/$RUNTIME_DIR/node_modules"
 mkdir -p "$NM"
 
+# Extensions that spawn child pi processes load the *host* packages
+# (pi-coding-agent dist/index.js, pi-agent-core, pi-ai, typebox). The bundled
+# dist alone cannot satisfy them, so vendor that closure from this machine's pi
+# installation into tools/pi/node_modules.
+NEEDS_HOST_SDK="$(sget '(m.packages||(m.skills&&m.skills.packages)||[]).some(p=>p.requiresHostSdk)?"1":"0"')"
+if [ "$NEEDS_HOST_SDK" = "1" ]; then
+    step "Vendoring the host SDK closure (child pi processes)"
+    HOST_ROOT=""
+    for cand in "$HOME/.pi/agent/install/releases/$PI_VERSION/node_modules" "$HOME/.pi/agent/npm/node_modules"; do
+        [ -f "$cand/@earendil-works/pi-coding-agent/package.json" ] && { HOST_ROOT="$cand"; break; }
+    done
+    [ -n "$HOST_ROOT" ] || { echo "requiresHostSdk: pi $PI_VERSION is not installed on this machine" >&2; exit 1; }
+    printf '{"packages":[{"name":"@earendil-works/pi-coding-agent","spec":"npm:@earendil-works/pi-coding-agent@%s"}]}' "$PI_VERSION" > "$STAGING/host-sdk.json"
+    node "$REPO/scripts/vendor-packages.mjs" --profile "$STAGING/host-sdk.json" --dest "$TARGET/$RUNTIME_DIR" \
+        --host-packages "$HOST_ROOT" --allow-host-provided --force --json "$STAGING/host-sdk.report" \
+        | grep -E 'MB|!' | sed 's/^/    /'
+fi
+
 COUNT="$(jget 'm.pi.runtimePackages.length')"
 i=0
 while [ "$i" -lt "$COUNT" ]; do
@@ -258,6 +276,65 @@ while [ "$i" -lt "$COUNT" ]; do
     i=$((i + 1))
 done
 
+# ── third-party packages (vendored from this host, no install at run time) ─
+PKG_COUNT="$(sget '(m.packages || (m.skills && m.skills.packages) || []).length')"
+PKG_ROOT="$TARGET/$AGENT_DIR/packages"
+if [ "$PKG_COUNT" != "0" ]; then
+    step "Vendoring $PKG_COUNT third-party package(s) from this host"
+    node "$REPO/scripts/vendor-packages.mjs" --profile "$SKILLS_FILE" --dest "$PKG_ROOT" --prune --json "$STAGING/packages.json"
+    ok "vendored $(node -e 'const r=require(process.argv[1]);console.log(r.packages.length+" package(s), "+r.totalMb+" MB")' "$STAGING/packages.json")"
+else
+    [ -d "$PKG_ROOT" ] && { rm -rf "$PKG_ROOT"; ok "removed vendored packages (none in profile)"; }
+    PKG_ROOT=""
+fi
+
+# package-provided skills: -ns disables package skill discovery, so the single
+# --skill path the launcher passes must contain them too.
+PKG_SKILLS=""
+if [ "$PKG_COUNT" != "0" ]; then
+    for sk in "$PKG_ROOT/node_modules"/*/skills/* "$PKG_ROOT/node_modules"/@*/*/skills/*; do
+        [ -f "$sk/SKILL.md" ] || continue
+        NAME="$(basename "$sk")"
+        rm -rf "$TARGET/$SKILLS_DIR/$NAME"
+        cp -R "$sk" "$TARGET/$SKILLS_DIR/$NAME"
+        PKG_SKILLS="$PKG_SKILLS $NAME"
+        ok "package skill $NAME"
+    done
+fi
+node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1],JSON.stringify(process.argv.slice(2)))' \
+    "$STAGING/package-skills.json" $PKG_SKILLS
+
+# settings.json: drive-relative package paths (survive a different letter/mount)
+SETTINGS="$TARGET/$AGENT_DIR/settings.json"
+if [ -f "$SETTINGS" ]; then
+    node -e '
+      const fs = require("fs");
+      const [profilePath, settingsPath, pkgCount] = process.argv.slice(1);
+      const raw = JSON.parse(fs.readFileSync(profilePath, "utf8"));
+      const profile = raw.skills ? raw : { skills: raw };
+      const s = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+      const pkgs = Array.isArray(profile.packages) ? profile.packages : [];
+      if (pkgs.length) s.packages = pkgs.map((p) => "./packages/node_modules/" + p.name);
+      else delete s.packages;
+      if (profile.settings && typeof profile.settings === "object") Object.assign(s, profile.settings);
+      fs.writeFileSync(settingsPath, JSON.stringify(s, null, 2) + "\n");
+      console.log("    settings.json merged (" + pkgs.length + " package entries)");
+    ' "$SKILLS_FILE" "$SETTINGS" "$PKG_COUNT"
+fi
+
+# web-search.json: sanitized template only. SearXNG needs a self-hosted Python
+# server, so it is deliberately absent; the owner adds API keys later.
+if [ ! -f "$TARGET/$AGENT_DIR/web-search.json" ]; then
+    cp "$REPO/config/pi/web-search.json" "$TARGET/$AGENT_DIR/web-search.json"
+    ok "web-search.json written (provider auto, no SearXNG)"
+else ok "web-search.json kept"; fi
+
+# ── workspace (cwd of the launcher, home of the llm-wiki vault) ────────
+step "Creating workspace"
+mkdir -p "$TARGET/workspace"
+[ -f "$TARGET/workspace/README.md" ] || cp "$REPO/docs/workspace.md" "$TARGET/workspace/README.md"
+ok "workspace ready (WIKI_HOME=$TARGET/workspace)"
+
 # ── launchers + docs ────────────────────────────────────────────────────
 step "Installing launchers and docs"
 cp "$REPO/start.sh" "$REPO/start.bat" "$REPO/autorun.inf" "$REPO/README.md" "$TARGET/"
@@ -272,7 +349,7 @@ cp "$REPO/scripts/fix-paths.js" "$TARGET/tools/bin/fix-paths.js"
 printf '%s\n' "$TARGET/" > "$TARGET/config/drive-root.txt"
 cp "$REPO/docs/scope.md" "$REPO/docs/manifest.schema.json" "$TARGET/docs/"
 mkdir -p "$TARGET/scripts"
-cp "$REPO/scripts/verify.ps1" "$REPO/scripts/verify.sh" "$REPO/scripts/update.ps1" "$REPO/scripts/update.sh" "$TARGET/scripts/"
+cp "$REPO/scripts/verify.ps1" "$REPO/scripts/verify.sh" "$REPO/scripts/update.ps1" "$REPO/scripts/update.sh" "$REPO/scripts/vendor-packages.mjs" "$TARGET/scripts/"
 chmod +x "$TARGET/scripts/verify.sh" "$TARGET/scripts/update.sh" 2>/dev/null || true
 # the drive copy records the effective skill list, so update/verify can work from it
 node -e '
@@ -280,10 +357,14 @@ node -e '
   const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
   const raw=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
   m.skills = raw.skills ? raw.skills : raw;
-  fs.writeFileSync(process.argv[3], JSON.stringify(m,null,2)+"
-");
-  console.log("    manifest.json written with "+m.skills.include.length+" skills");
-' "$MANIFEST" "$SKILLS_FILE" "$TARGET/manifest.json"
+  const report = process.argv[4];
+  const pkgSkills = process.argv[5];
+  if (report && fs.existsSync(report)) m.packages = JSON.parse(fs.readFileSync(report,"utf8")).packages;
+  else delete m.packages;
+  m.packageSkills = (pkgSkills && fs.existsSync(pkgSkills)) ? JSON.parse(fs.readFileSync(pkgSkills,"utf8")) : [];
+  fs.writeFileSync(process.argv[3], JSON.stringify(m,null,2)+"\n");
+  console.log("    manifest.json written with "+m.skills.include.length+" skills, "+(m.packages?m.packages.length:0)+" packages");
+' "$MANIFEST" "$SKILLS_FILE" "$TARGET/manifest.json" "$STAGING/packages.json" "$STAGING/package-skills.json"
 
 # ── git (windows-only payload) ──────────────────────────────────────────
 if [ "$SKIP_GIT" = 0 ]; then

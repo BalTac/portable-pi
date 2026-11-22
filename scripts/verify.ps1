@@ -73,6 +73,7 @@ if ($currentRoot -match '^[A-Za-z]:') {
 # ── 2. skills: exactly the whitelist ────────────────────────────────────
 Head "Skills whitelist"
 $expected = @($M.skills.include | ForEach-Object { $_.name })
+if ($M.PSObject.Properties['packageSkills'] -and $M.packageSkills) { $expected += @($M.packageSkills) }
 $present = @(Get-ChildItem $skillsDir -Directory -ErrorAction SilentlyContinue |
     Where-Object { Test-Path (Join-Path $_.FullName 'SKILL.md') } | ForEach-Object { $_.Name })
 foreach ($n in $expected) {
@@ -84,7 +85,7 @@ if ($extra) { Fail "unexpected skills on the drive: $($extra -join ', ')" } else
 # ── 3. no host paths / device IPs in the shipped config ─────────────────
 Head "No host-specific references"
 $leaks = @()
-foreach ($f in (Get-ChildItem $agentDir -Recurse -File -Include *.json, *.md | Where-Object { $_.Name -notin @('auth.json', 'models-store.json') })) {
+foreach ($f in (Get-ChildItem $agentDir -Recurse -File -Include *.json, *.md | Where-Object { $_.Name -notin @('auth.json', 'models-store.json') -and $_.FullName -notlike (Join-Path $agentDir 'packages') + '*' })) {
     $text = Get-Content $f.FullName -Raw -ErrorAction SilentlyContinue
     if ($text -match '[A-Za-z]:\\Users\\|/mnt/[a-z]/|/home/[a-z]|192\.168\.') { $leaks += $f.FullName }
 }
@@ -93,6 +94,43 @@ foreach ($s in (Get-ChildItem $skillsDir -Recurse -File -Include *.md)) {
     $text = Get-Content $s.FullName -Raw -ErrorAction SilentlyContinue
     if ($text -match '[A-Za-z]:\\Users\\\\|/mnt/[a-z]/|/home/[a-z]|192\.168\.') { Fail "host path in skill: $($s.FullName)" }
 }
+
+# ── 3b. vendored packages, no SearXNG, vault on the drive ──────────────
+Head "Third-party packages"
+$pkgRoot = Join-Path $agentDir 'packages\node_modules'
+$settingsPath = Join-Path $agentDir 'settings.json'
+$settingsText = if (Test-Path $settingsPath) { Get-Content $settingsPath -Raw } else { '' }
+$declared = @()
+if ($M.PSObject.Properties['packages']) { $declared = @($M.packages) }
+foreach ($p in $declared) {
+    $pkgJson = Join-Path $pkgRoot (Join-Path $p.name 'package.json')
+    if (-not (Test-Path $pkgJson)) { Fail "$($p.name) missing under config/pi/packages" ; continue }
+    $v = (Get-Content $pkgJson -Raw | ConvertFrom-Json).version
+    if ($p.version -and $v -ne $p.version) { Fail "$($p.name) version mismatch: drive $v, manifest $($p.version)" }
+    else { Pass "$($p.name)@$v" }
+    $rel = './packages/node_modules/' + $p.name
+    if ($settingsText -notlike "*$rel*") { Fail "settings.json does not declare $rel" }
+}
+if ($declared.Count -gt 0 -and $settingsText -match 'searxng') { Fail 'web-search config references SearXNG' }
+if ($declared.Count -gt 0 -and $settingsText -match '192\.168\.') { Fail 'settings.json references a LAN address' }
+$wsPath = Join-Path $agentDir 'web-search.json'
+if ($declared.Count -gt 0) {
+    if (-not (Test-Path $wsPath)) { Fail 'config/pi/web-search.json missing' }
+    elseif ((Get-Content $wsPath -Raw) -match 'searxng|192\.168\.') { Fail 'web-search.json references SearXNG or a LAN address' }
+    else { Pass 'web-search.json without SearXNG/LAN' }
+}
+$hostSdk = @($declared | Where-Object { $_.PSObject.Properties['requiresHostSdk'] -and $_.requiresHostSdk })
+if ($hostSdk.Count -gt 0) {
+    $runtimeNm = Join-Path (Join-Path $Drive $M.paths.runtimeDir) 'node_modules'
+    foreach ($rel in @('@earendil-works/pi-coding-agent/dist/index.js', '@earendil-works/pi-agent-core/package.json', '@earendil-works/pi-ai/package.json', 'typebox/package.json')) {
+        # a version conflict may nest the dep under its dependent
+        $flat = Join-Path $runtimeNm $rel
+        $nested = Join-Path (Join-Path $runtimeNm '@earendil-works/pi-coding-agent/node_modules') $rel
+        if ((Test-Path $flat) -or (Test-Path $nested)) { Pass "host SDK: $rel" } else { Fail "host SDK missing for child processes: tools/pi/node_modules/$rel" }
+    }
+}
+if (-not (Test-Path (Join-Path $Drive 'workspace'))) { Fail 'workspace missing (llm-wiki vault home)' }
+else { Pass 'workspace present (WIKI_HOME)' }
 
 # ── 4. host config baseline (what must not change) ──────────────────────
 Head "Host isolation"
@@ -157,7 +195,11 @@ if (-not $NoModel) {
     if ($missing.Count -eq 0) { Pass "all $($visible.Count) model-visible drive skills reported" }
     else { Fail "skills not reported by the model: $($missing -join ', ')" }
 
-    $excluded = @($M.skills.exclude | ForEach-Object { $_.name })
+    # skills that come from a vendored package are in exclude[] as *standalone*
+    # copies, but they are legitimately visible on the drive
+    $fromPackages = @()
+    if ($M.PSObject.Properties['packageSkills'] -and $M.packageSkills) { $fromPackages = @($M.packageSkills) }
+    $excluded = @($M.skills.exclude | ForEach-Object { $_.name } | Where-Object { $fromPackages -notcontains $_ })
     $leaked = @($excluded | Where-Object { $text -match ('(^|[\s,])' + [regex]::Escape($_) + '($|[\s,.])') })
     if ($leaked.Count -eq 0) { Pass "no host/discovered skill leaked in" } else { Fail "leaked skills: $($leaked -join ', ')" }
 

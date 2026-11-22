@@ -2,29 +2,71 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "portable-pi manifest",
   "type": "object",
-  "required": ["schemaVersion", "name", "pi", "node", "paths", "isolation", "skills"],
+  "required": [
+    "schemaVersion",
+    "name",
+    "pi",
+    "node",
+    "paths",
+    "isolation",
+    "skills"
+  ],
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 1 },
-    "name": { "type": "string" },
-    "description": { "type": "string" },
-    "usbLabel": { "type": "string", "maxLength": 11 },
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "usbLabel": {
+      "type": "string",
+      "maxLength": 11
+    },
     "pi": {
       "type": "object",
-      "required": ["version", "entrypoint", "runtimePackages", "launchArgs"],
+      "required": [
+        "version",
+        "entrypoint",
+        "runtimePackages",
+        "launchArgs"
+      ],
       "properties": {
-        "version": { "type": "string" },
-        "entrypoint": { "type": "string" },
+        "version": {
+          "type": "string"
+        },
+        "entrypoint": {
+          "type": "string"
+        },
         "runtimePackages": {
           "type": "array",
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": ["name", "version", "keep"],
+            "required": [
+              "name",
+              "version",
+              "keep"
+            ],
             "properties": {
-              "name": { "type": "string" },
-              "version": { "type": "string" },
-              "keep": { "type": "array", "items": { "type": "string" } },
-              "reason": { "type": "string" }
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "keep": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "reason": {
+                "type": "string"
+              }
             }
           }
         },
@@ -32,39 +74,105 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["name", "version", "enabled"],
+            "required": [
+              "name",
+              "version",
+              "enabled"
+            ],
             "properties": {
-              "name": { "type": "string" },
-              "version": { "type": "string" },
-              "enabled": { "type": "boolean" },
-              "reason": { "type": "string" }
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": "string"
+              }
             }
           }
         },
-        "launchArgs": { "type": "array", "items": { "type": "string" } }
+        "launchArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "hostPackages": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "type": "string"
+            },
+            "enabledWhen": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "stripping": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     "node": {
       "type": "object",
-      "required": ["version", "targets"],
+      "required": [
+        "version",
+        "targets"
+      ],
       "properties": {
-        "version": { "type": "string" },
-        "flavor": { "type": "string" },
-        "enginesFloor": { "type": "string" },
-        "checksums": { "type": "string" },
+        "version": {
+          "type": "string"
+        },
+        "flavor": {
+          "type": "string"
+        },
+        "enginesFloor": {
+          "type": "string"
+        },
+        "checksums": {
+          "type": "string"
+        },
         "targets": {
           "type": "array",
           "minItems": 1,
           "items": {
             "type": "object",
-            "required": ["id", "archive", "url", "installDir", "nodeBin"],
+            "required": [
+              "id",
+              "archive",
+              "url",
+              "installDir",
+              "nodeBin"
+            ],
             "properties": {
-              "id": { "type": "string" },
-              "archive": { "type": "string" },
-              "url": { "type": "string" },
-              "installDir": { "type": "string" },
-              "nodeBin": { "type": "string" },
-              "npmBin": { "type": "string" }
+              "id": {
+                "type": "string"
+              },
+              "archive": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "installDir": {
+                "type": "string"
+              },
+              "nodeBin": {
+                "type": "string"
+              },
+              "npmBin": {
+                "type": "string"
+              }
             }
           }
         }
@@ -72,54 +180,133 @@
     },
     "git": {
       "type": "object",
-      "required": ["enabled"],
+      "required": [
+        "enabled"
+      ],
       "properties": {
-        "enabled": { "type": "boolean" },
-        "platforms": { "type": "array", "items": { "type": "string" } },
+        "enabled": {
+          "type": "boolean"
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "portableGit": {
           "type": "object",
-          "required": ["version", "file", "url", "installDir", "pathEntries"],
+          "required": [
+            "version",
+            "file",
+            "url",
+            "installDir",
+            "pathEntries"
+          ],
           "properties": {
-            "version": { "type": "string" },
-            "file": { "type": "string" },
-            "url": { "type": "string" },
-            "sizeMb": { "type": "number" },
-            "installDir": { "type": "string" },
-            "pathEntries": { "type": "array", "items": { "type": "string" } }
+            "version": {
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "sizeMb": {
+              "type": "number"
+            },
+            "installDir": {
+              "type": "string"
+            },
+            "pathEntries": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       }
     },
     "paths": {
       "type": "object",
-      "required": ["agentDir", "sessionDir", "skillsDir", "tempDir", "runtimeDir"],
-      "additionalProperties": { "type": "string" }
+      "required": [
+        "agentDir",
+        "sessionDir",
+        "skillsDir",
+        "tempDir",
+        "runtimeDir"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      }
     },
     "isolation": {
       "type": "object",
-      "required": ["env"],
+      "required": [
+        "env"
+      ],
       "properties": {
-        "env": { "type": "object", "additionalProperties": { "type": "string" } },
-        "notOverridden": { "type": "object", "additionalProperties": { "type": "string" } },
-        "guarantees": { "type": "array", "items": { "type": "string" } }
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "notOverridden": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "guarantees": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "skills": {
       "type": "object",
-      "required": ["include", "exclude"],
+      "required": [
+        "include",
+        "exclude"
+      ],
       "properties": {
         "include": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["name", "root", "path"],
+            "required": [
+              "name",
+              "root",
+              "path"
+            ],
             "properties": {
-              "name": { "type": "string" },
-              "root": { "type": "string", "enum": ["agent", "agents", "npm"] },
-              "path": { "type": "string" },
-              "reason": { "type": "string" },
-              "caveat": { "type": "string" },
-              "sizeMb": { "type": "number" }
+              "name": {
+                "type": "string"
+              },
+              "root": {
+                "type": "string",
+                "enum": [
+                  "agent",
+                  "agents",
+                  "npm"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "caveat": {
+                "type": "string"
+              },
+              "sizeMb": {
+                "type": "number"
+              }
             }
           }
         },
@@ -127,13 +314,104 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["name", "reason"],
+            "required": [
+              "name",
+              "reason"
+            ],
             "properties": {
-              "name": { "type": "string" },
-              "reason": { "type": "string" }
+              "name": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
             }
           }
+        },
+        "packages": {
+          "description": "Third-party packages vendored onto the drive (profile passthrough; the drive manifest also records them at the top level)",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "spec"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "spec": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "sizeMb": {
+                "type": "number"
+              },
+              "skipOptional": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "configFiles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "settings": {
+          "description": "Extra keys merged into <drive>/config/pi/settings.json (profile only)",
+          "type": "object"
         }
+      }
+    },
+    "packages": {
+      "description": "What the build actually vendored (drive manifest)",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "spec",
+          "version"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "spec": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "sizeMb": {
+            "type": "number"
+          },
+          "skippedOptional": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requiresHostSdk": {
+            "type": "boolean",
+            "description": "the package imports the host pi SDK (child processes): vendor the host closure into tools/pi"
+          }
+        }
+      }
+    },
+    "packageSkills": {
+      "description": "Skills copied out of packages into config/pi/skills (-ns disables package discovery)",
+      "type": "array",
+      "items": {
+        "type": "string"
       }
     }
   }

@@ -36,6 +36,11 @@ fi
 # ── agent dir: everything stays on the drive ─────────────────────────
 export PI_CODING_AGENT_DIR="$USB/config/pi"
 export PI_CODING_AGENT_SESSION_DIR="$USB/config/pi/sessions"
+# llm-wiki: the personal vault lives on the drive, never in the host's ~/.llm-wiki
+export WIKI_HOME="$USB/workspace"
+# exFAT has no ownership: git refuses a repo it does not own. Keep the exception
+# in the environment instead of writing to the host's ~/.gitconfig.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*'
 export PI_SKIP_VERSION_CHECK=1
 export PI_TELEMETRY=0
 
@@ -72,8 +77,9 @@ if [ "${1:-}" = "--shell" ]; then
     echo "  exit     to close"
     echo " ======================================================"
     echo ""
+    cd "$USB/workspace" 2>/dev/null || cd "$HOME"
     exec bash --norc --noprofile -i
 fi
 
-cd "$HOME"
+cd "$USB/workspace" 2>/dev/null || cd "$HOME"
 exec sh "$USB/tools/bin/pi" "$@"

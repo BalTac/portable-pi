@@ -1,5 +1,5 @@
 {
-  "$comment": "Example skill whitelist. copy to skills.local.json (gitignored) and edit. Skill names are only examples: any directory containing a SKILL.md works.",
+  "$comment": "Example drive profile. Copy to skills.local.json (gitignored) and edit. The public repo ships this file with no real names: the selection is yours. include[] = skills copied to <drive>/config/pi/skills; packages[] = third-party extensions vendored under <drive>/config/pi/packages; settings{} = extra keys merged into <drive>/config/pi/settings.json.",
   "include": [
     {
       "name": "example-skill",
@@ -8,6 +8,27 @@
       "reason": "root 'agent' resolves to <home>/.pi/agent, 'agents' to <home>/.agents, 'npm' to <home>/.pi/agent/npm/node_modules"
     }
   ],
+  "packages": [
+    {
+      "name": "example-package",
+      "spec": "npm:example-pi-package@1.2.3",
+      "reason": "vendored, not installed at run time: the build copies the package plus its dependency closure into <drive>/config/pi/packages/node_modules, and settings.json points at it with a drive-relative path. Spec may also be a bare 'example-pi-package' (version read from the host install). Set requiresHostSdk when the extension spawns child pi processes or otherwise imports the host packages: the build then also vendors @earendil-works/pi-coding-agent, pi-agent-core, pi-ai, typebox and their dependency closure into <drive>/tools/pi.",
+      "sizeMb": 5,
+      "skipOptional": [
+        "optional-dep-that-needs-a-native-build-or-a-2GB-model"
+      ],
+      "configFiles": [
+        "web-search.json"
+      ],
+      "requiresHostSdk": true
+    }
+  ],
+  "settings": {
+    "subagents": {
+      "defaultModel": "provider/model-id",
+      "defaultProvider": "provider"
+    }
+  },
   "exclude": [
     {
       "name": "example-skill-not-portable",

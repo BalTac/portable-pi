@@ -33,9 +33,13 @@ $M = Get-Content $ManifestPath -Raw | ConvertFrom-Json
 $SkillsFile = Join-Path $RepoRoot 'skills.local.json'
 $SkillList = $M.skills
 if (Test-Path $SkillsFile) { $SkillList = Get-Content $SkillsFile -Raw | ConvertFrom-Json }
+$pkgList = @()
+if ($SkillList -and $SkillList.PSObject.Properties['packages'] -and $SkillList.packages) { $pkgList = @($SkillList.packages) }
 
 if (-not $NodeVersion) { $NodeVersion = $M.node.version }
 if (-not $PiVersion) { $PiVersion = $M.pi.version }
+
+$nodeExe = (Get-Command node -ErrorAction SilentlyContinue)
 
 $Staging = Join-Path ([IO.Path]::GetTempPath()) ("portable-pi-build-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Force -Path $Staging | Out-Null
@@ -236,6 +240,33 @@ try {
     # ── pi runtime ────────────────────────────────────────────────────────
     $nm = Join-Path $out.Runtime 'node_modules'
     New-Item -ItemType Directory -Force -Path $nm | Out-Null
+
+    # Extensions that spawn child pi processes load the *host* packages
+    # (pi-coding-agent dist/index.js, pi-agent-core, pi-ai, typebox). The
+    # bundled dist alone cannot satisfy them, so vendor that closure from the
+    # build machine's pi installation into tools/pi/node_modules.
+    $needsHostSdk = @($pkgList | Where-Object { $_.PSObject.Properties['requiresHostSdk'] -and $_.requiresHostSdk }).Count -gt 0
+    if ($needsHostSdk) {
+        Write-Step 'Vendoring the host SDK closure (child pi processes)'
+        $hostCandidates = @(
+            (Join-Path $env:USERPROFILE ".pi\agent\install\releases\$PiVersion\node_modules"),
+            (Join-Path $env:USERPROFILE '.pi\agent\npm\node_modules')
+        )
+        $hostRoot = $hostCandidates | Where-Object { Test-Path (Join-Path $_ '@earendil-works\pi-coding-agent\package.json') } | Select-Object -First 1
+        if (-not $hostRoot) {
+            throw "requiresHostSdk: pi $PiVersion is not installed on this machine (looked in $($hostCandidates -join ', '))"
+        }
+        $hostProfile = Join-Path $Staging 'host-sdk.json'
+        $hostProfileJson = @{ packages = @(@{ name = '@earendil-works/pi-coding-agent'; spec = "npm:@earendil-works/pi-coding-agent@$PiVersion" }) } | ConvertTo-Json -Depth 5
+        # no BOM: node's JSON.parse chokes on one
+        [IO.File]::WriteAllText($hostProfile, $hostProfileJson, (New-Object System.Text.UTF8Encoding($false)))
+        $hostLog = Join-Path $Staging 'host-sdk.log'
+        & $nodeExe.Source (Join-Path $RepoRoot 'scripts\vendor-packages.mjs') --profile $hostProfile --dest $out.Runtime `
+            --host-packages $hostRoot --allow-host-provided --force --json (Join-Path $Staging 'host-sdk.report') *> $hostLog
+        if ($LASTEXITCODE -ne 0) { Get-Content $hostLog | Select-Object -Last 15 | ForEach-Object { Write-Host $_ }; throw 'host SDK vendoring failed' }
+        Get-Content $hostLog | Where-Object { $_ -match 'MB|!' } | ForEach-Object { Write-Ok $_ }
+    }
+
     $pkgs = @($M.pi.runtimePackages)
     foreach ($o in $M.pi.optionalPackages) { if ($o.enabled) { $pkgs += $o } }
 
@@ -324,6 +355,96 @@ try {
         Write-Ok "$($s.name)"
     }
 
+    # ── third-party packages (vendored, no install at run time) ───────────
+    $pkgList = @()
+    if ($SkillList -and $SkillList.PSObject.Properties['packages'] -and $SkillList.packages) { $pkgList = @($SkillList.packages) }
+    $pkgList = @()
+    if ($SkillList -and $SkillList.PSObject.Properties['packages'] -and $SkillList.packages) { $pkgList = @($SkillList.packages) }
+    $pkgRoot = Join-Path $out.Config 'packages'
+    $nodeExe = (Get-Command node -ErrorAction SilentlyContinue)
+    if ($pkgList.Count -gt 0) {
+        Write-Step "Vendoring $($pkgList.Count) third-party package(s) from this host"
+        if (-not $nodeExe) { throw "node is required on the build machine to vendor packages" }
+        $reportPath = Join-Path $Staging 'packages.json'
+        & $nodeExe.Source (Join-Path $RepoRoot 'scripts\vendor-packages.mjs') --profile $SkillsFile --dest $pkgRoot --prune --json $reportPath
+        if ($LASTEXITCODE -ne 0) { throw "vendor-packages.mjs failed with exit code $LASTEXITCODE" }
+        if (-not (Test-Path $reportPath)) { throw "vendor-packages.mjs produced no report" }
+        $pkgReport = Get-Content $reportPath -Raw | ConvertFrom-Json
+        Write-Ok "vendored $($pkgReport.packages.Count) package(s), $($pkgReport.totalMb) MB"
+    } else {
+        if (Test-Path $pkgRoot) { Remove-Item $pkgRoot -Recurse -Force; Write-Ok 'removed vendored packages (none in profile)' }
+        $pkgReport = $null
+    }
+
+    # Package-provided skills: `-ns` disables package skill discovery, so the
+    # launcher's single --skill path must contain them too. Copy each package's
+    # skills/* into config/pi/skills (the package itself still provides tools).
+    $pkgSkillNames = @()
+    if ($pkgList.Count -gt 0 -and (Test-Path (Join-Path $pkgRoot 'node_modules'))) {
+        $pkgDirs = @()
+        foreach ($d in (Get-ChildItem (Join-Path $pkgRoot 'node_modules') -Directory)) {
+            if ($d.Name.StartsWith('@')) { $pkgDirs += @(Get-ChildItem $d.FullName -Directory) } else { $pkgDirs += $d }
+        }
+        foreach ($pd in $pkgDirs) {
+            $skDir = Join-Path $pd.FullName 'skills'
+            if (-not (Test-Path $skDir)) { continue }
+            foreach ($sd in (Get-ChildItem $skDir -Directory)) {
+                if (-not (Test-Path (Join-Path $sd.FullName 'SKILL.md'))) { continue }
+                $dst = Join-Path $out.Skills $sd.Name
+                Remove-Item $dst -Recurse -Force -ErrorAction SilentlyContinue
+                Copy-Item $sd.FullName $dst -Recurse -Force
+                $pkgSkillNames += $sd.Name
+                Write-Ok "package skill $($sd.Name) <- $($pd.Name)"
+            }
+        }
+        # second prune: package skills are part of the drive whitelist too
+        $keepAll = @($keepNames) + $pkgSkillNames
+        foreach ($d in (Get-ChildItem $out.Skills -Directory -ErrorAction SilentlyContinue)) {
+            if ($keepAll -notcontains $d.Name) { Remove-Item $d.FullName -Recurse -Force; Write-Ok "pruned $($d.Name)" }
+        }
+    }
+
+    # settings.json: the packages live on the drive with *relative* paths, so a
+    # different drive letter/mount needs no repair; profile settings win.
+    $settingsPath = Join-Path $out.Config 'settings.json'
+    if (Test-Path $settingsPath) {
+        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        if ($pkgList.Count -gt 0) {
+            $rel = @($pkgList | ForEach-Object { './packages/node_modules/' + $_.name })
+            $settings | Add-Member -NotePropertyName packages -NotePropertyValue $rel -Force
+        } elseif ($settings.PSObject.Properties['packages']) {
+            $settings.PSObject.Properties.Remove('packages')
+        }
+        if ($SkillList -and $SkillList.PSObject.Properties['settings'] -and $SkillList.settings) {
+            foreach ($p in $SkillList.settings.PSObject.Properties) {
+                $settings | Add-Member -NotePropertyName $p.Name -NotePropertyValue $p.Value -Force
+            }
+        }
+        Write-JsonNoBom $settingsPath $settings
+        # PowerShell's ConvertTo-Json reflows the file: normalise to 2-space JSON so
+        # the drive copy stays diff-friendly and readable.
+        if ($nodeExe) {
+            & $nodeExe.Source -e 'const fs=require(\"fs\");const p=process.argv[1];fs.writeFileSync(p,JSON.stringify(JSON.parse(fs.readFileSync(p,\"utf8\")),null,2))' $settingsPath
+        }
+        Write-Ok "settings.json merged ($($pkgList.Count) package entries)"
+    }
+
+    # web-search.json: only a sanitized template. SearXNG needs a self-hosted
+    # Python server, so it is deliberately absent; keys are added by the owner.
+    $wsPath = Join-Path $out.Config 'web-search.json'
+    if (-not (Test-Path $wsPath)) {
+        Copy-Item (Join-Path $RepoRoot 'config\pi\web-search.json') $wsPath -Force
+        Write-Ok 'web-search.json written (provider auto, no SearXNG)'
+    } else { Write-Ok 'web-search.json kept' }
+
+    # ── workspace (cwd of the launcher, home of the llm-wiki vault) ──────
+    Write-Step 'Creating workspace'
+    $ws = Join-Path $Target 'workspace'
+    New-Item -ItemType Directory -Force -Path $ws | Out-Null
+    $wsReadme = Join-Path $ws 'README.md'
+    if (-not (Test-Path $wsReadme)) { Copy-Item (Join-Path $RepoRoot 'docs\workspace.md') $wsReadme -Force }
+    Write-Ok "workspace ready (WIKI_HOME=$ws)"
+
     # ── launchers + docs ──────────────────────────────────────────────────
     Write-Step "Installing launchers and docs"
     foreach ($f in @('autorun.inf', 'README.md', 'llms.txt', 'NOTICE', 'skills.example.json')) {
@@ -348,6 +469,7 @@ try {
     Copy-TextLf (Join-Path $RepoRoot 'scripts\verify.sh') (Join-Path $Target 'scripts\verify.sh')
     Copy-Item (Join-Path $RepoRoot 'scripts\update.ps1') (Join-Path $Target 'scripts\update.ps1') -Force
     Copy-TextLf (Join-Path $RepoRoot 'scripts\update.sh') (Join-Path $Target 'scripts\update.sh')
+    Copy-TextLf (Join-Path $RepoRoot 'scripts\vendor-packages.mjs') (Join-Path $Target 'scripts\vendor-packages.mjs')
     # self-healing when the drive shows up under another letter / mount point
     $toolBin = Join-Path $Target 'tools\bin'
     New-Item -ItemType Directory -Force -Path $toolBin | Out-Null
@@ -358,8 +480,14 @@ try {
     # the drive copy records the *effective* skill list, so update/verify can work from it
     $MDrive = $M | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $MDrive | Add-Member -NotePropertyName skills -NotePropertyValue $SkillList -Force
+    if ($pkgReport) {
+        $MDrive | Add-Member -NotePropertyName packages -NotePropertyValue @($pkgReport.packages) -Force
+    } elseif ($MDrive.PSObject.Properties['packages']) {
+        $MDrive.PSObject.Properties.Remove('packages')
+    }
+    $MDrive | Add-Member -NotePropertyName packageSkills -NotePropertyValue @($pkgSkillNames) -Force
     Write-JsonNoBom (Join-Path $Target 'manifest.json') $MDrive
-    Write-Ok "manifest.json written with $(@($SkillList.include).Count) skills"
+    Write-Ok "manifest.json written with $(@($SkillList.include).Count) skills, $(@($pkgList).Count) packages"
 
     # ── portable git (windows only) ───────────────────────────────────────
     if ($M.git.enabled -and -not $SkipGit) {

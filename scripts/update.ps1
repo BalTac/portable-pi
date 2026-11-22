@@ -212,6 +212,45 @@ try {
         }
     }
 
+    # ── vendored packages (only when this PC has the sources) ────────────
+    if (-not $SkipSkills -and $M.PSObject.Properties['packages'] -and @($M.packages).Count -gt 0) {
+        $hostModules = Join-Path $env:USERPROFILE '.pi\agent
+pm
+ode_modules'
+        $missingPkgs = @($M.packages | Where-Object { -not (Test-Path (Join-Path $hostModules (Join-Path $_.name 'package.json'))) })
+        if ($missingPkgs.Count -eq 0) {
+            Step "Aggiorno $($M.packages.Count) pacchetti vendorizzati"
+            $tmpProfile = Join-Path ([IO.Path]::GetTempPath()) ('portable-pi-packages-' + [Guid]::NewGuid().ToString('N').Substring(0, 8) + '.json')
+            @{ packages = @($M.packages) } | ConvertTo-Json -Depth 10 | Set-Content -Path $tmpProfile -Encoding utf8
+            $nodeExe = (Get-Command node -ErrorAction SilentlyContinue)
+            if (-not $nodeExe) { throw 'node is required on this machine to vendor packages' }
+            & $nodeExe.Source (Join-Path $Drive 'scripts\vendor-packages.mjs') --profile $tmpProfile --dest (Join-Path $Drive ($M.paths.agentDir + '\packages')) --prune
+            Remove-Item $tmpProfile -Force -ErrorAction SilentlyContinue
+            if ($LASTEXITCODE -ne 0) { throw "vendor-packages.mjs failed with exit code $LASTEXITCODE" }
+            # refresh the skills those packages expose (they live in config/pi/skills
+            # because -ns disables package skill discovery); never deletes anything
+            $pkgNm = Join-Path $Drive ($M.paths.agentDir + 'packages
+ode_modules')
+            $pkgDirs = @()
+            foreach ($d in (Get-ChildItem $pkgNm -Directory -ErrorAction SilentlyContinue)) {
+                if ($d.Name.StartsWith('@')) { $pkgDirs += @(Get-ChildItem $d.FullName -Directory -ErrorAction SilentlyContinue) } else { $pkgDirs += $d }
+            }
+            foreach ($pd in $pkgDirs) {
+                $skDir = Join-Path $pd.FullName 'skills'
+                if (-not (Test-Path $skDir)) { continue }
+                foreach ($sd in (Get-ChildItem $skDir -Directory -ErrorAction SilentlyContinue)) {
+                    if (-not (Test-Path (Join-Path $sd.FullName 'SKILL.md'))) { continue }
+                    $dst = Join-Path (Join-Path $Drive $M.paths.skillsDir) $sd.Name
+                    Remove-Item $dst -Recurse -Force -ErrorAction SilentlyContinue
+                    Copy-Item $sd.FullName $dst -Recurse -Force
+                    Ok "package skill $($sd.Name)"
+                }
+            }
+        } else {
+            Warn "package sources not available on this machine ($(($missingPkgs | ForEach-Object { $_.name }) -join ', ')): packages left untouched"
+        }
+    }
+
     # ── persist versions, then verify ────────────────────────────────────
     [IO.File]::WriteAllText($ManifestPath, ($M | ConvertTo-Json -Depth 20) + "`n", (New-Object System.Text.UTF8Encoding($false)))
     Ok "manifest.json sul drive aggiornato (pi $($M.pi.version), node $($M.node.version))"

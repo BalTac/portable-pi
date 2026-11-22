@@ -19,7 +19,8 @@ Windows  → double-click start.bat
 Linux    → bash /media/$USER/PORTABLE-PI/start.sh
 ```
 
-Content: ~430 MB, ~7,600 files. Recommended drive: **2 GB exFAT, USB 3.0**.
+Content: ~430 MB base, ~7,600 files; a drive profile with a few extensions and skills typically
+adds 40–150 MB (dependency closures included). Recommended drive: **2 GB exFAT, USB 3.0**.
 
 ---
 
@@ -40,15 +41,25 @@ MinGit so the agent's shell tool works even on a Windows box without Git.
 | Node.js 24 LTS (win-x64 + linux-x64) | portable runtime, no install | 102 + 192 MB | 6,794 |
 | `pi` 1.6.0 (`dist/bundle` + `pi-tui` + `photon-node`) | the agent | 17 MB | 343 |
 | Skill whitelist | plain instructions, no external device needed | depends on your selection | — |
+| Vendored packages (optional) | drive profile only: extensions from npm, copied with their dependency closure | depends on your selection | — |
 | MinGit (Windows only) | guarantees `bash` and `git` on a bare host | 94 MB | 376 |
 | `config/pi/` | agent dir: auth, settings, models, AGENTS.md, skills, sessions | — | — |
 
-The skill list is **yours**: the public repo ships no skill names. You provide a
-`skills.local.json` (gitignored, see `skills.example.json`) and the build merges it into
-the drive's manifest.
+The base is **pi only**: the public repo ships no skill names and no extensions
+(`config/pi/settings.json` has no `packages`, CI enforces it). Everything else is your
+drive profile: you provide a `skills.local.json` (gitignored, see `skills.example.json`)
+with `include` (skills), `packages` (extensions) and `settings`, and the build merges it
+into the drive's manifest.
 
-Not included, by design: extensions, MCP servers, self-hosted providers, anything that
-requires another machine on your LAN, and anything that needs a GPU box. See
+Included packages are **vendored, not installed at run time**: `scripts/vendor-packages.mjs`
+copies each package and its dependency closure from the build machine's pi npm dir into
+`config/pi/packages/node_modules`, and `settings.json` points at them with drive-relative
+paths (`./packages/node_modules/<name>`), so a different drive letter needs no repair. The
+skills a package exposes are mirrored into `config/pi/skills` because `-ns` disables package
+skill discovery.
+
+Not shippable even in a profile: MCP servers bound to a LAN service, self-hosted providers,
+anything that requires another machine, and anything that needs a GPU box. See
 [docs/scope.md](docs/scope.md) for the selection policy.
 
 ## Isolation model (verified, not promised)
@@ -59,6 +70,7 @@ The launcher sets:
 PI_CODING_AGENT_DIR=<usb>/config/pi
 PI_CODING_AGENT_SESSION_DIR=<usb>/config/pi/sessions
 PI_SKIP_VERSION_CHECK=1   PI_TELEMETRY=0
+WIKI_HOME=<usb>/workspace          (llm-wiki personal vault stays on the drive)
 TMP / TEMP / TMPDIR / NPM_CONFIG_CACHE / NODE_COMPILE_CACHE / XDG_CACHE_HOME → <usb>/temp
 ```
 
@@ -72,8 +84,8 @@ pi -ns --skill <usb>/config/pi/skills
 paths given to `--skill` keep loading. As a result:
 
 - sessions are created and kept on the drive; the host `~/.pi/agent` is never read or written;
-- the skills loaded are exactly the ones on the drive (plus skills exposed by packages you
-  installed on the drive yourself);
+- the skills loaded are exactly the ones on the drive, package-provided skills included
+  (the build mirrors them into `config/pi/skills`);
 - extensions, packages, MCP servers, prompt templates and themes come only from `config/pi`;
 - `HOME`/`USERPROFILE` stay the host's, so git and npm still see the user config of the
   machine you are on.
@@ -91,7 +103,8 @@ powershell -ExecutionPolicy Bypass -File scripts\verify.ps1 -Drive E:\
 bash scripts/verify.sh /media/$USER/PORTABLE-PI
 ```
 
-It checks layout, the skill whitelist, absence of host references, the launcher, a live turn
+It checks layout, the skill whitelist, the vendored packages and their settings entries,
+absence of host references (no SearXNG, no LAN address), the launcher, a live turn
 with a marker, the skill set actually visible to the model (must be the drive's, no leakage),
 the session landing on the drive, and a hash snapshot of the host config before/after. It
 exits non-zero if anything is written outside the drive. `--no-model` for static checks only.
@@ -142,11 +155,33 @@ PC has the source folders**, updates the versions recorded in the drive manifest
 the static verifier. It never touches `auth.json`, `sessions/`, `settings.json`,
 `models.json`, `AGENTS.md` or skills you added by hand.
 
-## Installing extensions and skills (staying isolated)
+## Skills and extensions (staying isolated)
 
-The agent dir `config/pi` **is** the agent's environment: everything you install ends up
-there. The same rule is written in `config/pi/AGENTS.md`, which the agent reads on every
-start.
+The agent dir `config/pi` **is** the agent's environment. The base repo is deliberately
+empty (no `packages`, no skills); your `skills.local.json` profile decides what travels.
+
+**Preferred: declare it in the profile, then rebuild.** The build vendors the packages from
+this machine's `~/.pi/agent/npm/node_modules`, so the drive starts offline with no install
+step and no registry access:
+
+```json
+{
+  "include": [ { "name": "example-skill", "root": "agent", "path": "skills/example-skill" } ],
+  "packages": [
+    { "name": "pi-web-access", "spec": "npm:pi-web-access@0.48.0",
+      "skipOptional": [], "reason": "bundled extension, zero-config search via Exa MCP" }
+  ],
+  "settings": { "subagents": { "defaultModel": "provider/model-id" } }
+}
+```
+
+`scripts/vendor-packages.mjs` derives the dependency closure (`dependencies` +
+`optionalDependencies` minus `skipOptional`), never copies host-provided peers
+(`@earendil-works/*`, `typebox`), dereferences symlinks (exFAT), and skips tests and
+multi-megabyte gallery media. `update.ps1`/`update.sh` refresh the vendored packages when
+this machine has the sources.
+
+**Manual install on a running drive** still works, for a quick test:
 
 | Action | Correct command | Where it lands |
 |---|---|---|
@@ -155,13 +190,48 @@ start.
 | Add a skill by hand | `config/pi/skills/<name>/SKILL.md` | loaded directly |
 | Uninstall | `pi remove npm:<pkg>` | — |
 
+A manual install is **not** reproduced by a rebuild: the build mirrors the profile and prunes
+packages that are not in `packages[]`. Add it to the profile instead.
+
 Avoid, because they write outside the drive: `-l`/`--local` on `pi install` (writes
 `.pi/settings.json` **in the host project**), `npm install -g`, `pip install --user`,
 `apt`/`brew`/`winget`, and writing into the host's `~/.agents/skills` or `~/.pi/agent`.
 
 Windows and Linux **share the same agent dir**: prefer pure JS/TS extensions. A package with
 native binaries (`*.node`, dependencies with `os`/`cpu`) only works on the system where you
-installed it.
+installed it. That is also why a package whose optional dependency is a native build or a
+2 GB model (e.g. `@tobilu/qmd` for llm-wiki embeddings) belongs in `skipOptional`.
+
+### LLM Wiki without embeddings
+
+`@zosmaai/pi-llm-wiki` works with lexical recall only: embeddings are optional and no-op when
+no embedding provider is configured, so no server on the LAN is needed. The vault follows
+`WIKI_HOME`, which the launcher sets to `<usb>/workspace`, so the personal vault is
+`<usb>/workspace/.llm-wiki` and never `~/.llm-wiki` on the host.
+
+### Extensions that spawn child pi processes
+
+`pi-subagents` (and anything using the subagent tool) cannot run on the bundled `dist` alone:
+the child imports the **host packages** — `@earendil-works/pi-coding-agent/dist/index.js`,
+`pi-agent-core`, `pi-ai` and `typebox` with their dependency closure. Mark such a package
+`"requiresHostSdk": true` in the profile and the build also vendors that closure into
+`tools/pi/node_modules` from this machine's pi installation
+(`~/.pi/agent/install/releases/<version>/node_modules`). Cost: about 65 MB / 7,800 files, and
+the drive copy is stripped of source maps, `.d.ts`, changelogs and `src/*.ts` (`docs/*.md` is
+kept because the system prompt references it).
+
+### Git on the drive
+
+exFAT records no ownership, so git refuses a repository it does not own. The launchers set
+`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=*` in the environment
+instead of writing `safe.directory` into the host's `~/.gitconfig`.
+
+### Web access without SearXNG
+
+`pi-web-access` needs no key: `auto` falls back to public Exa MCP, and `config/pi/web-search.json`
+ships as `{"provider": "auto"}`. SearXNG is deliberately absent because it is a self-hosted
+Python service — not portable. Add API keys to that file on the drive if you want a paid
+provider; never point it at a LAN address.
 
 ## Limits
 
@@ -208,21 +278,23 @@ rebuilds from scratch with `scripts/build.ps1` or `scripts/build.sh` starting fr
 ```
 portable-pi/
 ├── manifest.json              what to build: versions, packages, git payload
-├── skills.example.json        shape of the skill whitelist (copy to skills.local.json)
+├── skills.example.json        shape of the drive profile (copy to skills.local.json)
 ├── assets/banner.png          repository banner
 ├── README.md · llms.txt · NOTICE
 ├── start.bat / start.sh       launchers copied to the drive
 ├── autorun.inf                volume label/icon (Windows ignores AutoRun on USB)
 ├── config/
-│   ├── pi/                    agent-dir templates: settings, models, AGENTS.md
+│   ├── pi/                    agent-dir templates: settings, models, AGENTS.md, web-search
 │   └── env.example.{sh,bat}   optional API keys
 ├── scripts/
 │   ├── build.ps1 / build.sh   build a drive from the manifest
+│   ├── vendor-packages.mjs    copy profile packages + dependency closure onto the drive
 │   ├── update.ps1 / update.sh update an existing drive
 │   ├── verify.ps1 / verify.sh assert the isolation guarantees
 │   └── shims/                 pi / pi.cmd put on PATH by the launcher
 ├── docs/
 │   ├── scope.md               selection policy: what ships and what cannot
+│   ├── workspace.md           what <drive>/workspace is (cwd + llm-wiki vault)
 │   └── manifest.schema.json   manifest schema
 └── .github/workflows/         validation CI
 ```

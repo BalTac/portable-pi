@@ -33,6 +33,14 @@
           "*"
         ],
         "reason": "WASM image resize/EXIF (dynamic import, optional but keeps image support)"
+      },
+      {
+        "name": "jiti",
+        "version": "2.7.0",
+        "keep": [
+          "*"
+        ],
+        "reason": "unbundled dependency of the pi bundle: jiti-static-loader does require(\"jiti\") at runtime to transpile TypeScript extensions. Without it every .ts/.js package extension fails to load on the drive."
       }
     ],
     "optionalPackages": [
@@ -48,7 +56,14 @@
       "--skill",
       "{usb}/config/pi/skills"
     ],
-    "launchArgsNote": "-ns disables ALL discovered skills (including the host ~/.agents/skills) while explicit --skill paths keep loading. This is the isolation guarantee."
+    "launchArgsNote": "-ns disables ALL discovered skills (including the host ~/.agents/skills) while explicit --skill paths keep loading. This is the isolation guarantee.",
+    "hostPackages": {
+      "root": "@earendil-works/pi-coding-agent",
+      "enabledWhen": "a drive-profile package sets requiresHostSdk (e.g. pi-subagents, which spawns child pi processes)",
+      "source": "the build machine's pi installation: ~/.pi/agent/install/releases/<version>/node_modules, then ~/.pi/agent/npm/node_modules",
+      "reason": "the bundled dist/ alone cannot satisfy extension code that imports the host SDK (pi-coding-agent dist/index.js, pi-agent-core, pi-ai, typebox and their dependency closure); the build vendors that closure into tools/pi/node_modules",
+      "stripping": "source maps, .d.ts, README/CHANGELOG markdown and src/*.ts are dropped; docs/*.md is kept because the system prompt points at it"
+    }
   },
   "node": {
     "version": "24.22.3",
@@ -115,6 +130,7 @@
     "env": {
       "PI_CODING_AGENT_DIR": "{usb}/config/pi",
       "PI_CODING_AGENT_SESSION_DIR": "{usb}/config/pi/sessions",
+      "WIKI_HOME": "{usb}/workspace",
       "PI_SKIP_VERSION_CHECK": "1",
       "PI_TELEMETRY": "0",
       "TMPDIR": "{usb}/temp",
@@ -133,7 +149,9 @@
       "<usb>/config/pi/sessions holds every session; the host ~/.pi/agent is never read or written",
       "skills loaded = exactly <usb>/config/pi/skills (verified with -ns + --skill)",
       "pi extensions, packages, MCP servers, prompt templates and themes come from <usb>/config/pi only",
-      "all temp/cache writes land in <usb>/temp"
+      "all temp/cache writes land in <usb>/temp",
+      "third-party packages are vendored under <usb>/config/pi/packages and declared with drive-relative paths, so they start offline and survive a drive-letter change",
+      "the llm-wiki vault follows WIKI_HOME=<usb>/workspace: it never reads or writes the host's ~/.llm-wiki"
     ]
   },
   "skillSourceRoots": {
@@ -144,7 +162,7 @@
   "skills": {
     "include": [],
     "exclude": [],
-    "note": "The public repo ships no skill names. Put your own selection in skills.local.json (gitignored, see skills.example.json); the build merges it into this manifest and into the drive copy."
+    "note": "The public repo ships no skill names and no extension names: the base is pi-only. Put your own selection in skills.local.json (gitignored, see skills.example.json) with include[] (skills), packages[] (extensions to vendor) and settings{}; the build merges it into this manifest and into the drive copy."
   },
   "auth": {
     "copyAuthJson": true,
