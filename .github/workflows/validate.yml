@@ -1,0 +1,55 @@
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  manifest-and-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: manifest.json is valid JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'))"
+
+      - name: schema is valid JSON
+        run: node -e "JSON.parse(require('fs').readFileSync('docs/manifest.schema.json','utf8'))"
+
+      - name: every included skill is declared with a reason
+        run: |
+          node -e '
+            const m = require("./manifest.json");
+            const bad = m.skills.include.filter(s => !s.name || !s.root || !s.path);
+            if (bad.length) { console.error("incomplete include entry", bad); process.exit(1); }
+            const noReason = m.skills.exclude.filter(s => !s.reason || s.reason.length < 10);
+            if (noReason.length) { console.error("exclusions without a reason:", noReason.map(s => s.name)); process.exit(1); }
+            console.log(`${m.skills.include.length} included, ${m.skills.exclude.length} excluded`);
+          '
+
+      - name: shell syntax
+        run: |
+          for f in scripts/*.sh start.sh; do bash -n "$f" && echo "ok $f"; done
+
+      - name: no secrets tracked
+        run: |
+          ! git ls-files | grep -qiE '(^|/)(auth\.json|env\.sh|env\.bat|\.credentials\.json)$' \
+            || { echo "a secret file is tracked"; exit 1; }
+          echo "no secret files tracked"
+
+  powershell:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: parse PowerShell scripts
+        shell: pwsh
+        run: |
+          $errs = @()
+          foreach ($f in @('scripts/build.ps1', 'scripts/update.ps1', 'scripts/verify.ps1')) {
+            $tokens = $null; $parseErrors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) { $errs += $parseErrors; Write-Host "FAIL $f" } else { Write-Host "ok $f" }
+          }
+          if ($errs.Count -gt 0) { $errs | ForEach-Object { Write-Host $_ }; exit 1 }
