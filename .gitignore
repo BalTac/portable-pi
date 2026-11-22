@@ -1,0 +1,17 @@
+# Build output — lives on the USB drive, never in the repo
+bin/
+tools/pi/
+tools/git/
+temp/
+
+# Secrets — never committed
+config/pi/auth.json
+config/pi/sessions/
+config/pi/skills/
+config/env.sh
+config/env.bat
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
