@@ -240,6 +240,9 @@ cp "$REPO/scripts/shims/pi.sh" "$TARGET/tools/bin/pi"
 cp "$REPO/scripts/shims/pi.cmd" "$TARGET/tools/bin/pi.cmd"
 chmod +x "$TARGET/tools/bin/pi" "$TARGET/start.sh" 2>/dev/null || true
 cp "$REPO/docs/scope.md" "$TARGET/docs/scope.md"
+mkdir -p "$TARGET/scripts"
+cp "$REPO/scripts/verify.ps1" "$REPO/scripts/verify.sh" "$TARGET/scripts/"
+chmod +x "$TARGET/scripts/verify.sh" 2>/dev/null || true
 cp "$MANIFEST" "$TARGET/manifest.json"
 
 # ── git (windows-only payload) ──────────────────────────────────────────

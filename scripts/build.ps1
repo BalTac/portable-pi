@@ -298,6 +298,10 @@ try {
     Write-Ok "shims: tools/bin/pi, tools/bin/pi.cmd"
     New-Item -ItemType Directory -Force -Path (Join-Path $Target 'docs') | Out-Null
     Copy-Item (Join-Path $RepoRoot 'docs\scope.md') (Join-Path $Target 'docs\scope.md') -Force
+    # ship the verifier so the drive can be checked from itself
+    New-Item -ItemType Directory -Force -Path (Join-Path $Target 'scripts') | Out-Null
+    Copy-Item (Join-Path $RepoRoot 'scripts\verify.ps1') (Join-Path $Target 'scripts\verify.ps1') -Force
+    Copy-TextLf (Join-Path $RepoRoot 'scripts\verify.sh') (Join-Path $Target 'scripts\verify.sh')
     Copy-Item (Join-Path $RepoRoot 'manifest.json') (Join-Path $Target 'manifest.json') -Force
 
     # ── portable git (windows only) ───────────────────────────────────────
