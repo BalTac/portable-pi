@@ -1,0 +1,56 @@
+# portable-pi
+
+> A self-contained USB drive that runs the pi coding agent on Windows and Linux.
+> No installation on the host machine. Sessions, credentials, skills and caches
+> live on the drive. Repository: https://github.com/BalTac/portable-pi
+
+## What it is
+
+portable-pi builds a bootable-nothing, dependency-free USB stick (~430 MB) that
+contains Node.js 24 LTS for Windows x64 and Linux x64, the `pi` coding agent
+(pi-coding-agent 1.6.0, prebundled ESM), a whitelist of nine agent skills, and
+MinGit for Windows so the agent's `bash` tool works even on a host without Git.
+Plug it in, run `start.bat` (Windows) or `start.sh` (Linux), and the agent starts
+with its own configuration, sessions and skills already in place.
+
+## Isolation model
+
+Isolation is configuration-level, not a sandbox:
+
+- `PI_CODING_AGENT_DIR=<drive>/config/pi` — settings, extensions, packages,
+  MCP servers, skills, sessions all live on the drive.
+- `PI_SKIP_VERSION_CHECK=1`, `PI_TELEMETRY=0`, temp and npm/node caches on the drive.
+- the agent is launched as `pi -ns --skill <drive>/config/pi/skills`, which
+  disables every discovered skill (including the host's `~/.agents/skills`) while
+  keeping the drive's skills mounted.
+- the agent still runs with the operating-system permissions of the user who
+  started it; files outside the drive are reachable. For a real boundary, use a
+  container, a VM or a dedicated guest account.
+
+## Keywords
+
+portable AI coding agent, USB flash drive, self-contained, no-install,
+pi-coding-agent, agent skills, offline-capable CLI, Windows and Linux, x64,
+exFAT, Node.js portable, MinGit, terminal agent, developer tooling,
+reproducible agent environment, isolated agent configuration, LLM agent on a stick.
+
+## Build and maintenance
+
+- `scripts/build.ps1` (Windows) and `scripts/build.sh` (Linux) build a drive from
+  `manifest.json`, which pins versions and lists included/excluded skills with reasons.
+- `scripts/update.ps1` / `scripts/update.sh` refresh the runtime on an existing
+  drive without touching credentials, sessions or user skills.
+- `scripts/verify.ps1` / `scripts/verify.sh` assert the isolation guarantees and
+  fail if anything is written outside the drive.
+
+## Provenance and license
+
+MIT. Ideas and USB layout derived from `bnovik0v/portable-agent-usb` (MIT, 2026);
+this is a rewrite for pi, not a git fork. See `NOTICE`.
+
+## Files
+
+- `manifest.json` — what gets built, with versions and the skill whitelist
+- `README.md` — full documentation
+- `docs/scope.md` — included/excluded skills and why
+- `config/pi/AGENTS.md` — the instructions the agent reads on the drive

@@ -1,10 +1,17 @@
+<p align="center">
+  <img src="assets/banner.png" alt="portable-pi — a self-contained USB drive running the pi coding agent" width="100%">
+</p>
+
 # portable-pi
 
-**Una chiavetta USB con `pi` (pi-coding-agent) dentro. Nessuna installazione sull'host.**
+**A self-contained USB drive that runs the `pi` coding agent on Windows and Linux.**
+Nessuna installazione sull'host: colleghi, lanci, lavori, scolleghi.
 
-Colleghi, lanci, lavori, scolleghi. Sessioni, credenziali, skill e cache restano sulla
-chiavetta: l'host non viene toccato e non c'è alcuna dipendenza da altri dispositivi
-della tua rete.
+*portable AI coding agent · USB flash drive · no-install · self-contained ·
+Windows + Linux x64 · exFAT · agent skills · isolated agent configuration*
+
+Sessioni, credenziali, skill e cache restano sulla chiavetta: l'host non viene toccato
+e non c'è alcuna dipendenza da altri dispositivi della tua rete.
 
 ```
 Windows  → doppio clic su start.bat
@@ -244,6 +251,36 @@ portable-pi/
 │   └── manifest.schema.json   schema del manifest
 └── .github/                   (opzionale) CI, template issue
 ```
+
+## Crediti e attribuzione
+
+Questo progetto è un **rewrite per `pi`** delle idee e del layout USB di
+[`bnovik0v/portable-agent-usb`](https://github.com/bnovik0v/portable-agent-usb)
+(MIT, 2026), che porta Claude Code e Codex su chiavetta.
+
+**Non è un fork git**: non condivide commit con l'originale e nessun file sorgente è
+copiato alla lettera. Cosa viene dall'originale e cosa è nuovo è elencato in
+[`NOTICE`](NOTICE), insieme al testo MIT dell'upstream.
+
+Altre attribuzioni:
+
+| Componente | Licenza |
+|---|---|
+| `pi` / `@earendil-works/*` | MIT |
+| `@silvia-odwyer/photon-node` | Apache-2.0 |
+| Node.js | MIT (OpenJS Foundation) |
+| MinGit / Git for Windows | GPL-2.0 — scaricato a build time, non incluso nel repo; sul drive resta il suo `LICENSE.txt` |
+| skill `ponytail*` | MIT (`@bacnh85`) |
+| skill `impeccable`, `frontend-ui-engineering`, `frontend-design` | vedi i rispettivi `SKILL.md` |
+
+## Per crawler e agenti LLM
+
+- [`llms.txt`](llms.txt) — riassunto machine-readable del progetto (cos'è, modello di
+  isolamento, parole chiave, dove stanno build e verifica).
+- [`manifest.json`](manifest.json) — fonte di verità su cosa viene costruito e cosa è
+  deliberatamente escluso.
+- [`docs/scope.md`](docs/scope.md) — per ogni skill esclusa, la dipendenza che la rende
+  non portabile.
 
 ## Licenza
 

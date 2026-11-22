@@ -1,0 +1,55 @@
+portable-pi
+===========
+
+This project is a rewrite for pi (pi-coding-agent) of the ideas and the
+USB-drive layout pioneered by:
+
+    portable-agent-usb
+    https://github.com/bnovik0v/portable-agent-usb
+    MIT License, Copyright (c) 2026
+
+Upstream ships Claude Code and OpenAI Codex on a USB stick. It is not a git fork:
+portable-pi shares no commits with it and no source file is copied verbatim.
+What was reused:
+
+  * the overall idea and directory layout (bin/<platform>, tools/<platform>,
+    config/, temp/ plus a per-OS launcher);
+  * the "no traces on the host" approach: redirect the agent config directory,
+    the temp directory and the package caches onto the drive;
+  * the launcher convention of detecting the drive root from the script path;
+  * the exFAT choice and its documented consequences;
+  * the autorun.inf pattern (volume label only: modern Windows ignores AutoRun
+    programs on removable media).
+
+Everything else is new work for a different agent: manifest-driven builds,
+Node.js 24 LTS payload, MinGit instead of PortableGit (94 MB / 376 files instead
+of 392 MB / 9,622), an agent-dir override for pi, explicit skill mounting through
+`-ns --skill`, the isolation verifier, the self-contained updater, the
+cross-platform (Windows + Linux) payload, and the bundled agent instructions.
+
+The MIT license of the upstream project is reproduced below to keep the
+attribution intact.
+
+---
+
+MIT License
+
+Copyright (c) 2026 (portable-agent-usb contributors)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
