@@ -28,6 +28,10 @@ export NPM_CONFIG_CACHE=${NPM_CONFIG_CACHE:-$usb/temp/npm-cache}
 export NODE_COMPILE_CACHE=${NODE_COMPILE_CACHE:-$usb/temp/node-cache}
 export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$usb/temp/cache}
 
+if [ -f "$usb/tools/bin/fix-paths.js" ]; then
+  "$node_dir/bin/node" "$usb/tools/bin/fix-paths.js" "$usb" --quiet 2>/dev/null || true
+fi
+
 skills_dir="$usb/config/pi/skills"
 cli="$usb/tools/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
 

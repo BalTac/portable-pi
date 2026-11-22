@@ -255,6 +255,8 @@ mkdir -p "$TARGET/tools/bin" "$TARGET/docs"
 cp "$REPO/scripts/shims/pi.sh" "$TARGET/tools/bin/pi"
 cp "$REPO/scripts/shims/pi.cmd" "$TARGET/tools/bin/pi.cmd"
 chmod +x "$TARGET/tools/bin/pi" "$TARGET/start.sh" 2>/dev/null || true
+cp "$REPO/scripts/fix-paths.js" "$TARGET/tools/bin/fix-paths.js"
+printf '%s\n' "$TARGET/" > "$TARGET/config/drive-root.txt"
 cp "$REPO/docs/scope.md" "$REPO/docs/manifest.schema.json" "$TARGET/docs/"
 mkdir -p "$TARGET/scripts"
 cp "$REPO/scripts/verify.ps1" "$REPO/scripts/verify.sh" "$REPO/scripts/update.ps1" "$REPO/scripts/update.sh" "$TARGET/scripts/"

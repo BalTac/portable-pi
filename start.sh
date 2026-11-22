@@ -54,6 +54,11 @@ if [ -f "$USB/config/env.sh" ]; then
     . "$USB/config/env.sh"
 fi
 
+# ── self-heal: the drive may be mounted at a different path than at build time ──
+if [ -f "$USB/tools/bin/fix-paths.js" ]; then
+    "$NODE_DIR/bin/node" "$USB/tools/bin/fix-paths.js" "$USB" --quiet || true
+fi
+
 # ── shell-only mode ──────────────────────────────────────────────────
 if [ "${1:-}" = "--shell" ]; then
     shift

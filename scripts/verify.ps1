@@ -49,6 +49,27 @@ foreach ($f in @('auth.json', 'settings.json', 'AGENTS.md')) {
 if (Test-Path (Join-Path $Drive 'start.bat')) { Pass 'start.bat' } else { Fail 'start.bat missing' }
 if (Test-Path (Join-Path $Drive 'start.sh')) { Pass 'start.sh' } else { Fail 'start.sh missing' }
 
+# ── 1b. drive root record (self-heal state) ─────────────────────────────
+Head "Drive root"
+$rootFile = Join-Path (Join-Path $Drive 'config') 'drive-root.txt'
+$rootRecord = ''
+if (Test-Path $rootFile) { $rootRecord = (Get-Content $rootFile -Raw).Trim() }
+$currentRoot = if ($Drive -match '^[A-Za-z]:$') { $Drive + '\' } else { $Drive + '/' }
+if (-not $rootRecord) { Fail 'config/drive-root.txt missing (rebuild the drive)' }
+elseif ($rootRecord -ne $currentRoot) {
+    Fail "recorded root '$rootRecord' != current '$currentRoot' - run start.bat/start.sh once to self-heal"
+} else { Pass "recorded root matches the current one: $currentRoot" }
+
+if ($currentRoot -match '^[A-Za-z]:') {
+    $stale = @()
+    foreach ($f in (Get-ChildItem (Join-Path $Drive $M.paths.agentDir) -Filter *.json -File -ErrorAction SilentlyContinue)) {
+        $t = Get-Content $f.FullName -Raw -ErrorAction SilentlyContinue
+        if ($t -match '[A-Za-z]:\\' -and -not $t.Contains($currentRoot)) { $stale += $f.Name }
+    }
+    if ($stale.Count -eq 0) { Pass 'no stale absolute paths in config' }
+    else { Fail "stale absolute paths in: $($stale -join ', ')" }
+}
+
 # ── 2. skills: exactly the whitelist ────────────────────────────────────
 Head "Skills whitelist"
 $expected = @($M.skills.include | ForEach-Object { $_.name })

@@ -342,6 +342,13 @@ try {
     Copy-TextLf (Join-Path $RepoRoot 'scripts\verify.sh') (Join-Path $Target 'scripts\verify.sh')
     Copy-Item (Join-Path $RepoRoot 'scripts\update.ps1') (Join-Path $Target 'scripts\update.ps1') -Force
     Copy-TextLf (Join-Path $RepoRoot 'scripts\update.sh') (Join-Path $Target 'scripts\update.sh')
+    # self-healing when the drive shows up under another letter / mount point
+    $toolBin = Join-Path $Target 'tools\bin'
+    New-Item -ItemType Directory -Force -Path $toolBin | Out-Null
+    Copy-TextLf (Join-Path $RepoRoot 'scripts\fix-paths.js') (Join-Path $toolBin 'fix-paths.js')
+    $rootRecord = if ($Target -match '^[A-Za-z]:$') { $Target.ToUpper() + '\' } else { $Target + '/' }
+    [IO.File]::WriteAllText((Join-Path $Target 'config\drive-root.txt'), $rootRecord + "`n", (New-Object System.Text.UTF8Encoding($false)))
+    Write-Ok "drive root recorded: $rootRecord"
     # the drive copy records the *effective* skill list, so update/verify can work from it
     $MDrive = $M | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $MDrive | Add-Member -NotePropertyName skills -NotePropertyValue $SkillList -Force

@@ -42,6 +42,11 @@ if not exist "%USB%\config\pi\sessions" mkdir "%USB%\config\pi\sessions"
 REM ── optional API keys ────────────────────────────────────────────────
 if exist "%USB%\config\env.bat" call "%USB%\config\env.bat"
 
+REM ── self-heal: the drive may be a different letter than when it was built ──
+if exist "%USB%\tools\bin\fix-paths.js" (
+    "%NODE_DIR%\node.exe" "%USB%\tools\bin\fix-paths.js" "%USB%" --quiet
+)
+
 REM ── shell-only mode ──────────────────────────────────────────────────
 if /i "%~1"=="--shell" (
     shift

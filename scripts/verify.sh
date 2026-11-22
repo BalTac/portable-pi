@@ -57,6 +57,17 @@ done
 [ -f "$DRIVE/start.sh" ] && pass "start.sh" || fail "start.sh missing"
 [ -f "$DRIVE/start.bat" ] && pass "start.bat" || fail "start.bat missing"
 
+# ── 1b. drive root record ───────────────────────────────────────────────
+head_ "Drive root"
+ROOT_FILE="$DRIVE/config/drive-root.txt"
+ROOT_RECORD=""
+[ -f "$ROOT_FILE" ] && ROOT_RECORD="$(tr -d '\r\n' < "$ROOT_FILE")"
+CURRENT_ROOT="$DRIVE/"
+if [ -z "$ROOT_RECORD" ]; then fail "config/drive-root.txt missing (rebuild the drive)"
+elif [ "$ROOT_RECORD" != "$CURRENT_ROOT" ] && [ "$ROOT_RECORD" != "${CURRENT_ROOT%/}" ]; then
+    fail "recorded root '$ROOT_RECORD' != current '$CURRENT_ROOT' - run start.sh once to self-heal"
+else pass "recorded root matches the current one: $CURRENT_ROOT"; fi
+
 # ── 2. skills whitelist ─────────────────────────────────────────────────
 head_ "Skills whitelist"
 EXPECTED="$(jget 'm.skills.include.map(s=>s.name).join(" ")')"
