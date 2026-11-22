@@ -205,6 +205,46 @@ PORTABLE-PI/
 La build (`scripts/build.ps1` / `scripts/build.sh`) e i template di `config/` vivono nel
 repo, non sul drive: sul drive c'è solo il verificatore.
 
+## Dove stanno i sorgenti, l'installer e i temporanei
+
+| Cosa | Dove | Vita |
+|---|---|---|
+| **Sorgenti + installer** (questo repo: `scripts/`, `config/`, `docs/`, `manifest.json`) | `D:\openclaw\portable-pi` | permanente, ~200 KB, sotto git |
+| **Runtime costruito** (Node, pi, MinGit, skill, auth) | la chiavetta, es. `F:\` | vive sul drive |
+| **Script di manutenzione** (`verify`, `update`) | `<drive>\scripts\` **e** il repo | copiati sulla chiavetta a ogni build |
+| **Staging di build** (download, estrazioni) | `%TEMP%\portable-pi-build-*` | **cancellato** alla fine di ogni build/update |
+| Sorgenti dei download | `nodejs.org`, `registry.npmjs.org`, `github.com/git-for-windows` | rete, nessuna cache persistente |
+
+Quindi: **niente di indispensabile sta in `temp`**. La cartella temporanea serve solo da
+area di lavoro durante la build (estrazione dei tarball, dereferenziazione dei symlink,
+verifica degli sha256) e viene rimossa anche in caso di errore (`finally`).
+
+Il repo non contiene né binari né segreti: si ricostruisce da zero con `scripts/build.ps1`
+o `scripts/build.sh` a partire da `manifest.json`, quindi è leggero e sicuro da pubblicare.
+
+## Layout del repo
+
+```
+portable-pi/
+├── manifest.json              cosa costruire: versioni, pacchetti, skill, payload git
+├── README.md                  questo file
+├── LICENSE                    MIT
+├── start.bat / start.sh       launcher copiati sul drive
+├── autorun.inf                label/icona del volume
+├── config/
+│   ├── pi/                    template dell'agent dir: settings, models, AGENTS.md
+│   └── env.example.{sh,bat}   chiavi API opzionali
+├── scripts/
+│   ├── build.ps1 / build.sh   costruiscono il drive dal manifest
+│   ├── update.ps1 / update.sh aggiornano un drive esistente
+│   ├── verify.ps1 / verify.sh collaudano l'isolamento
+│   └── shims/                 pi / pi.cmd che il launcher mette nel PATH
+├── docs/
+│   ├── scope.md               cosa entra e cosa no, con il motivo
+│   └── manifest.schema.json   schema del manifest
+└── .github/                   (opzionale) CI, template issue
+```
+
 ## Licenza
 
 MIT — vedi [LICENSE](LICENSE).
