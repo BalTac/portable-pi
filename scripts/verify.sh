@@ -56,6 +56,11 @@ for f in auth.json settings.json AGENTS.md; do
 done
 [ -f "$DRIVE/start.sh" ] && pass "start.sh" || fail "start.sh missing"
 [ -f "$DRIVE/start.bat" ] && pass "start.bat" || fail "start.bat missing"
+[ -f "$DRIVE/update.sh" ] && pass "update.sh" || fail "update.sh missing"
+[ -f "$DRIVE/update.bat" ] && pass "update.bat" || fail "update.bat missing"
+for u in scripts/check-updates.mjs scripts/vendor-packages.mjs scripts/update.sh scripts/update.ps1; do
+    [ -f "$DRIVE/$u" ] && pass "$u" || fail "$u missing"
+done
 
 # ── 1b. drive root record ───────────────────────────────────────────────
 head_ "Drive root"
@@ -64,7 +69,7 @@ ROOT_RECORD=""
 [ -f "$ROOT_FILE" ] && ROOT_RECORD="$(tr -d '\r\n' < "$ROOT_FILE")"
 CURRENT_ROOT="$DRIVE/"
 if [ -z "$ROOT_RECORD" ]; then fail "config/drive-root.txt missing (rebuild the drive)"
-elif [ "$ROOT_RECORD" != "$CURRENT_ROOT" ] && [ "$ROOT_RECORD" != "${CURRENT_ROOT%/}" ]; then
+elif [ "${ROOT_RECORD%/}" != "${CURRENT_ROOT%/}" ]; then
     fail "recorded root '$ROOT_RECORD' != current '$CURRENT_ROOT' - run start.sh once to self-heal"
 else pass "recorded root matches the current one: $CURRENT_ROOT"; fi
 

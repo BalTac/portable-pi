@@ -48,6 +48,11 @@ foreach ($f in @('auth.json', 'settings.json', 'AGENTS.md')) {
 }
 if (Test-Path (Join-Path $Drive 'start.bat')) { Pass 'start.bat' } else { Fail 'start.bat missing' }
 if (Test-Path (Join-Path $Drive 'start.sh')) { Pass 'start.sh' } else { Fail 'start.sh missing' }
+if (Test-Path (Join-Path $Drive 'update.bat')) { Pass 'update.bat' } else { Fail 'update.bat missing' }
+if (Test-Path (Join-Path $Drive 'update.sh')) { Pass 'update.sh' } else { Fail 'update.sh missing' }
+foreach ($u in @('scripts\check-updates.mjs', 'scripts\vendor-packages.mjs', 'scripts\update.ps1', 'scripts\update.sh')) {
+    if (Test-Path (Join-Path $Drive $u)) { Pass $u } else { Fail "$u missing" }
+}
 
 # ── 1b. drive root record (self-heal state) ─────────────────────────────
 Head "Drive root"
@@ -56,7 +61,7 @@ $rootRecord = ''
 if (Test-Path $rootFile) { $rootRecord = (Get-Content $rootFile -Raw).Trim() }
 $currentRoot = if ($Drive -match '^[A-Za-z]:$') { $Drive + '\' } else { $Drive + '/' }
 if (-not $rootRecord) { Fail 'config/drive-root.txt missing (rebuild the drive)' }
-elseif ($rootRecord -ne $currentRoot) {
+elseif ($rootRecord.TrimEnd([char[]]'\/') -ne $currentRoot.TrimEnd([char[]]'\/')) {
     Fail "recorded root '$rootRecord' != current '$currentRoot' - run start.bat/start.sh once to self-heal"
 } else { Pass "recorded root matches the current one: $currentRoot" }
 

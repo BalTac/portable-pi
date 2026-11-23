@@ -338,18 +338,25 @@ ok "workspace ready (WIKI_HOME=$TARGET/workspace)"
 # ── launchers + docs ────────────────────────────────────────────────────
 step "Installing launchers and docs"
 cp "$REPO/start.sh" "$REPO/start.bat" "$REPO/autorun.inf" "$REPO/README.md" "$TARGET/"
+cp "$REPO/update.sh" "$TARGET/update.sh"
+# CRLF for the Windows launcher
+node -e 'const fs=require("fs");const s=fs.readFileSync(process.argv[1],"utf8").replace(/
+/g,"
+").replace(/
+/g,"
+");fs.writeFileSync(process.argv[2],s)' "$REPO/update.bat" "$TARGET/update.bat"
 cp "$REPO/llms.txt" "$REPO/NOTICE" "$REPO/skills.example.json" "$TARGET/"
 mkdir -p "$TARGET/assets"
 cp "$REPO/assets/banner.png" "$TARGET/assets/banner.png"
 mkdir -p "$TARGET/tools/bin" "$TARGET/docs"
 cp "$REPO/scripts/shims/pi.sh" "$TARGET/tools/bin/pi"
 cp "$REPO/scripts/shims/pi.cmd" "$TARGET/tools/bin/pi.cmd"
-chmod +x "$TARGET/tools/bin/pi" "$TARGET/start.sh" 2>/dev/null || true
+chmod +x "$TARGET/tools/bin/pi" "$TARGET/start.sh" "$TARGET/update.sh" 2>/dev/null || true
 cp "$REPO/scripts/fix-paths.js" "$TARGET/tools/bin/fix-paths.js"
 printf '%s\n' "$TARGET/" > "$TARGET/config/drive-root.txt"
 cp "$REPO/docs/scope.md" "$REPO/docs/manifest.schema.json" "$TARGET/docs/"
 mkdir -p "$TARGET/scripts"
-cp "$REPO/scripts/verify.ps1" "$REPO/scripts/verify.sh" "$REPO/scripts/update.ps1" "$REPO/scripts/update.sh" "$REPO/scripts/vendor-packages.mjs" "$TARGET/scripts/"
+cp "$REPO/scripts/verify.ps1" "$REPO/scripts/verify.sh" "$REPO/scripts/update.ps1" "$REPO/scripts/update.sh" "$REPO/scripts/vendor-packages.mjs" "$REPO/scripts/check-updates.mjs" "$TARGET/scripts/"
 chmod +x "$TARGET/scripts/verify.sh" "$TARGET/scripts/update.sh" 2>/dev/null || true
 # the drive copy records the effective skill list, so update/verify can work from it
 node -e '

@@ -38,7 +38,7 @@ jobs:
 
       - name: shell syntax
         run: |
-          for f in scripts/*.sh start.sh; do bash -n "$f" && echo "ok $f"; done
+          for f in scripts/*.sh start.sh update.sh; do bash -n "$f" && echo "ok $f"; done
 
       - name: no secrets tracked
         run: |

@@ -454,6 +454,8 @@ try {
     Copy-Item (Join-Path $RepoRoot 'assets\banner.png') (Join-Path $Target 'assets\banner.png') -Force
     Copy-TextCrlf (Join-Path $RepoRoot 'start.bat') (Join-Path $Target 'start.bat')
     Copy-TextLf (Join-Path $RepoRoot 'start.sh') (Join-Path $Target 'start.sh')
+    Copy-TextCrlf (Join-Path $RepoRoot 'update.bat') (Join-Path $Target 'update.bat')
+    Copy-TextLf (Join-Path $RepoRoot 'update.sh') (Join-Path $Target 'update.sh')
 
     $binDir = Join-Path $Target 'tools\bin'
     New-Item -ItemType Directory -Force -Path $binDir | Out-Null
@@ -470,6 +472,7 @@ try {
     Copy-Item (Join-Path $RepoRoot 'scripts\update.ps1') (Join-Path $Target 'scripts\update.ps1') -Force
     Copy-TextLf (Join-Path $RepoRoot 'scripts\update.sh') (Join-Path $Target 'scripts\update.sh')
     Copy-TextLf (Join-Path $RepoRoot 'scripts\vendor-packages.mjs') (Join-Path $Target 'scripts\vendor-packages.mjs')
+    Copy-TextLf (Join-Path $RepoRoot 'scripts\check-updates.mjs') (Join-Path $Target 'scripts\check-updates.mjs')
     # self-healing when the drive shows up under another letter / mount point
     $toolBin = Join-Path $Target 'tools\bin'
     New-Item -ItemType Directory -Force -Path $toolBin | Out-Null

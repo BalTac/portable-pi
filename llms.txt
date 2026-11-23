@@ -41,8 +41,12 @@ reproducible agent environment, isolated agent configuration, LLM agent on a sti
 
 - `scripts/build.ps1` (Windows) and `scripts/build.sh` (Linux) build a drive from
   `manifest.json`, which pins versions and lists included/excluded skills with reasons.
-- `scripts/update.ps1` / `scripts/update.sh` refresh the runtime on an existing
-  drive without touching credentials, sessions or user skills.
+- `update.bat` / `update.sh` on the drive check the npm registry, exit when nothing is out
+  of date, and otherwise let the user update the client, the extensions, or both in a single
+  pass. They set the same isolation environment as the launchers (temp/cache on the drive)
+  and run the static verifier at the end.
+- `scripts/update.ps1` / `scripts/update.sh` are the engines (`--check`, `--components
+  client|extensions|all`, `--yes`); `scripts/check-updates.mjs` is the registry check.
 - `scripts/verify.ps1` / `scripts/verify.sh` assert the isolation guarantees and
   fail if anything is written outside the drive.
 

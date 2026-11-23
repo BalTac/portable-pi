@@ -34,6 +34,7 @@ const jsonOut = arg('json');
 const doPrune = flag('prune');
 const allowHostProvided = flag('allow-host-provided');
 const forceCopy = flag('force'); // re-copy even when the destination version matches
+const allowMissing = flag('allow-missing'); // optional deps omitted on purpose (npm --omit=optional)
 
 const HOST_ROOT = resolve(arg('host-packages') || join(homedir(), '.pi', 'agent', 'npm', 'node_modules'));
 
@@ -89,14 +90,15 @@ function shouldCopy(src) {
     if (SKIP_DIRS.has(base)) return false;
     let st;
     try { st = statSync(src); } catch { return false; }
-    if (st.isFile() && NON_RUNTIME.test(base)) return false;
-    // Markdown is dropped except inside docs/: pi's system prompt points at
-    // <pi package>/docs for its own documentation.
-    if (st.isFile() && /.md$/i.test(base) && !/[\/]docs[\/]/.test(src)) return false;
+    if (st.isFile() && NON_RUNTIME.test(base) && !/^skill\.md$/i.test(base)) return false;
+    // Markdown is dropped except inside docs/ (pi's system prompt points at its
+    // own docs) and except SKILL.md (package skills are mirrored into
+    // config/pi/skills, and -ns makes that mirror the only visible copy).
+    if (st.isFile() && /\.md$/i.test(base) && !/[\\/]docs[\\/]/.test(src) && !/^skill\.md$/i.test(base)) return false;
     if (st.isFile() && st.size > HEAVY_BYTES && HEAVY_MEDIA.test(base)) return false;
     // TypeScript sources are not opened by the loader; entry points are .js/.ts
     // at the package root, never under src/.
-    if (st.isFile() && /.ts$/.test(base) && /[\/]src[\/]/.test(src)) return false;
+    if (st.isFile() && /\.ts$/.test(base) && /[\\/]src[\\/]/.test(src)) return false;
     return true;
 }
 
@@ -197,14 +199,14 @@ for (const entry of packages) {
     const version = readPkg(join(destNodeModules, name)).version;
     const mb = +(dirSize(join(destNodeModules, name)) / 1048576).toFixed(1);
     copiedTop.push({ name, version, sizeMb: mb });
-    summary.push({ name, spec: specRaw, version, sizeMb: mb, skippedOptional: [...skipOptional], requiresHostSdk: entry.requiresHostSdk === true });
+    summary.push({ name, spec: specRaw, version, sizeMb: mb, skipOptional: [...skipOptional], skippedOptional: [...skipOptional], requiresHostSdk: entry.requiresHostSdk === true });
     log(`${name}@${version} (${mb} MB)`);
 }
 
-if (doPrune && missing.size > 0) {
+if (doPrune && missing.size > 0 && !allowMissing) {
     warn(`prune skipped: incomplete closure (${[...missing].join(', ')})`);
 }
-if (doPrune && missing.size === 0) {
+if (doPrune && (missing.size === 0 || allowMissing)) {
     const keep = new Set(flatNames);
     for (const entry of readdirSync(destNodeModules, { withFileTypes: true })) {
         const full = join(destNodeModules, entry.name);

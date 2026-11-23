@@ -141,20 +141,54 @@ merges it into `<drive>/manifest.json`, which is the record of what the drive co
 
 ## Update an existing drive
 
-```powershell
-powershell -ExecutionPolicy Bypass -File E:\scripts\update.ps1
-powershell -File E:\scripts\update.ps1 -PiVersion latest
-powershell -File E:\scripts\update.ps1 -ForcePi -Node latest
+Two layers: a **launcher** that checks, explains and asks, and an **engine** that does the work.
+
 ```
-```bash
-bash /media/$USER/PORTABLE-PI/scripts/update.sh --pi latest --node latest
+Windows:  update.bat          Linux:  ./update.sh
 ```
 
-It reads the drive's own `manifest.json` (no repo needed), swaps the pi runtime packages,
-optionally updates Node (sha256 verified), refreshes the whitelisted skills **only if this
-PC has the source folders**, updates the versions recorded in the drive manifest, then runs
-the static verifier. It never touches `auth.json`, `sessions/`, `settings.json`,
-`models.json`, `AGENTS.md` or skills you added by hand.
+The launcher sets the same isolation environment as `start` (drive node in `PATH`, temp and
+npm cache on the drive, `PI_CODING_AGENT_DIR`, git's `safe.directory`), then runs
+`scripts/check-updates.mjs`: it compares the drive's `manifest.json` with the npm registry
+(pi, every vendored package) and with the Node LTS line. **If nothing is out of date it exits
+without touching the drive.** Otherwise it asks what to update:
+
+| Choice | What runs |
+|---|---|
+| `1` client | the pi runtime (and Node, with sha256 verification, if you say yes) |
+| `2` estensioni | the vendored packages at their latest registry version + their skills |
+| `3` tutto | both in **one pass** — the launcher is ours, so it is not limited to one component per run |
+| `0` | exit, nothing changes |
+
+Non-interactive: `update.bat /all`, `update.bat /client`, `update.bat /ext`
+(`./update.sh --all|--client|--ext`). The engine is still usable directly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File E:\scripts\update.ps1 -Check
+powershell -File E:\scripts\update.ps1 -Components extensions -Yes
+powershell -File E:\scripts\update.ps1 -PiVersion latest -Node latest
+```
+```bash
+bash /media/$USER/PORTABLE-PI/scripts/update.sh --check
+bash /media/$USER/PORTABLE-PI/scripts/update.sh --components all --yes
+```
+
+How the pieces are updated:
+
+- **client**: downloads the pinned/latest tarballs from npm, swaps only the runtime package
+  directories, checks `pi --version`, then re-vendors the host SDK when the profile has a
+  `requiresHostSdk` package (otherwise pi-subagents' children break on the new client).
+- **extensions**: installs the profile packages at their latest version with the drive's own
+  npm into a **temporary staging dir** (host temp, removed at the end — nothing installed
+  globally), then vendors the closure onto the drive. The old `config/pi/packages` tree is
+  deleted **before** copying, and the launcher refuses to start if the free space (counted on
+  file count, because exFAT uses 32 KB clusters) is not enough.
+- **skills**: the whitelisted ones are refreshed only when this PC has the source folders;
+  package skills are mirrored from the vendored packages.
+- **verify**: the static verifier runs at the end; a failure is reported as a non-zero exit.
+
+It reads the drive's own `manifest.json` (no repo needed) and never touches `auth.json`,
+`sessions/`, `settings.json`, `models.json`, `AGENTS.md` or skills added by hand.
 
 ## Skills and extensions (staying isolated)
 
@@ -295,6 +329,7 @@ portable-pi/
 ├── assets/banner.png          repository banner
 ├── README.md · llms.txt · NOTICE
 ├── start.bat / start.sh       launchers copied to the drive
+├── update.bat / update.sh     update launchers: check, then choose components
 ├── autorun.inf                volume label/icon (Windows ignores AutoRun on USB)
 ├── config/
 │   ├── pi/                    agent-dir templates: settings, models, AGENTS.md, web-search
@@ -303,6 +338,7 @@ portable-pi/
 │   ├── build.ps1 / build.sh   build a drive from the manifest
 │   ├── vendor-packages.mjs    copy profile packages + dependency closure onto the drive
 │   ├── update.ps1 / update.sh update an existing drive
+│   ├── check-updates.mjs      registry check (pi + vendored packages + Node LTS)
 │   ├── verify.ps1 / verify.sh assert the isolation guarantees
 │   └── shims/                 pi / pi.cmd put on PATH by the launcher
 ├── docs/
