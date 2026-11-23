@@ -212,13 +212,15 @@
     }
   },
   "sizeBudget": {
-    "nodeWin": "~80 MB",
-    "nodeLinux": "~110 MB",
-    "piRuntime": "~25 MB",
-    "skills": "~22 MB",
-    "portableGit": "~93 MB extracted (MinGit, 376 files)",
-    "totalWithoutGit": "~330 MB",
-    "totalWithGit": "~425 MB",
-    "recommendedDrive": "2 GB exFAT, USB 3.0"
+    "nodeWin": "~102 MB extracted",
+    "nodeLinux": "~192 MB extracted",
+    "piRuntime": "~17 MB",
+    "jiti": "~2 MB (unbundled runtime dependency, needed for TypeScript extensions)",
+    "skills": "depends on the drive profile (impeccable alone is ~22 MB)",
+    "hostSdk": "~65 MB / ~7,800 files, only when a package sets requiresHostSdk (pi-subagents); ~250 MB real on exFAT with 32 KB clusters",
+    "portableGit": "~94 MB extracted (MinGit, 376 files)",
+    "totalBase": "~430 MB",
+    "totalWithGitAndProfile": "~550-650 MB",
+    "recommendedDrive": "2 GB exFAT, USB 3.0 (a 2 GB stick ends up ~75-80% full with pi-subagents)"
   }
 }

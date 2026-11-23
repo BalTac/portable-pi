@@ -39,9 +39,10 @@ MinGit so the agent's shell tool works even on a Windows box without Git.
 | Component | Role | Size | Files |
 |---|---|---|---|
 | Node.js 24 LTS (win-x64 + linux-x64) | portable runtime, no install | 102 + 192 MB | 6,794 |
-| `pi` 1.6.0 (`dist/bundle` + `pi-tui` + `photon-node`) | the agent | 17 MB | 343 |
+| `pi` 1.6.0 (`dist/bundle` + `pi-tui` + `photon-node` + `jiti`) | the agent (`jiti` is an unbundled runtime dependency: it transpiles TypeScript extensions) | 19 MB | 390 |
 | Skill whitelist | plain instructions, no external device needed | depends on your selection | — |
 | Vendored packages (optional) | drive profile only: extensions from npm, copied with their dependency closure | depends on your selection | — |
+| Host SDK (optional) | drive profile only, when a package sets `requiresHostSdk`: lets child pi processes start (pi-subagents) | ~65 MB | ~7,800 |
 | MinGit (Windows only) | guarantees `bash` and `git` on a bare host | 94 MB | 376 |
 | `config/pi/` | agent dir: auth, settings, models, AGENTS.md, skills, sessions | — | — |
 
@@ -175,10 +176,22 @@ step and no registry access:
 }
 ```
 
+Profile fields:
+
+| Field | Meaning |
+|---|---|
+| `include[]` | `{ name, root, path }` — a skill copied to `config/pi/skills/<name>`; `root` is `agent` (`~/.pi/agent`), `agents` (`~/.agents`) or `npm` (`~/.pi/agent/npm/node_modules`) |
+| `packages[]` | `{ name, spec, reason, skipOptional?, configFiles?, requiresHostSdk? }` — an extension vendored under `config/pi/packages/node_modules/<name>` |
+| `packages[].skipOptional` | optional dependencies that must **not** be vendored (native builds, 2 GB models: e.g. `@tobilu/qmd`) |
+| `packages[].requiresHostSdk` | the package imports the host pi SDK or spawns child pi processes; the build also vendors that closure into `tools/pi` |
+| `settings{}` | extra keys merged into the drive's `config/pi/settings.json` (e.g. `subagents`); LAN endpoints are never allowed |
+| `exclude[]` | `{ name, reason }` — documentation of what you left out and why |
+
 `scripts/vendor-packages.mjs` derives the dependency closure (`dependencies` +
 `optionalDependencies` minus `skipOptional`), never copies host-provided peers
-(`@earendil-works/*`, `typebox`), dereferences symlinks (exFAT), and skips tests and
-multi-megabyte gallery media. `update.ps1`/`update.sh` refresh the vendored packages when
+(`@earendil-works/*`, `typebox`) unless `--allow-host-provided` is used for the host SDK
+step, dereferences symlinks (exFAT), strips source maps, `.d.ts` and `src/*.ts` (keeping the
+`docs/*.md` that pi's system prompt references), and skips tests and multi-megabyte gallery media. `update.ps1`/`update.sh` refresh the vendored packages when
 this machine has the sources.
 
 **Manual install on a running drive** still works, for a quick test:
