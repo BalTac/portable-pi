@@ -22,6 +22,7 @@ export PI_CODING_AGENT_DIR="$USB/config/pi"
 export PI_CODING_AGENT_SESSION_DIR="$USB/config/pi/sessions"
 export PI_SKIP_VERSION_CHECK=1
 export PI_TELEMETRY=0
+export PI_HOST_TEMP="${TMPDIR:-/tmp}"
 export TMPDIR="$USB/temp" TMP="$USB/temp" TEMP="$USB/temp"
 export NPM_CONFIG_CACHE="$USB/temp/npm-cache"
 export NODE_COMPILE_CACHE="$USB/temp/node-cache"

@@ -69,7 +69,11 @@ registry_latest() {
     "$NODE_EXE" -e 'fetch(`https://registry.npmjs.org/${encodeURIComponent(process.argv[1])}/latest`,{signal:AbortSignal.timeout(15000)}).then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json()}).then(j=>console.log(j.version))' "$1"
 }
 
-STAGING="$(mktemp -d)"
+# the launchers point TMPDIR at the drive for isolation; npm staging stays on
+# the host (PI_HOST_TEMP), because exFAT makes npm take minutes per package
+HOST_TEMP="${PI_HOST_TEMP:-${TMPDIR:-/tmp}}"
+[ -d "$HOST_TEMP" ] || HOST_TEMP=/tmp
+STAGING="$(mktemp -d "$HOST_TEMP/portable-pi-update-XXXXXX")"
 trap 'rm -rf "$STAGING"' EXIT
 
 step() { printf '==> %s\n' "$*"; }
@@ -102,8 +106,17 @@ run_npm() {
         || { tail -12 "$STAGING/npm.log" >&2; echo "npm failed: $*" >&2; exit 1; }
 }
 free_mb() { df -Pk "$DRIVE" 2>/dev/null | awk 'NR==2{print int($4/1024)}'; }
+# cluster size (allocation unit): exFAT on a small stick may use 32 KB, which is
+# what thousands of small files really cost; follow the volume, not a guess
+cluster_bytes() {
+    local b
+    b=$(stat -f -c %S "$DRIVE" 2>/dev/null || echo 0)
+    case "$b" in ''|*[!0-9]*|0) b=32768 ;; esac
+    echo "$b"
+}
 file_count() { find "$1" -type f 2>/dev/null | wc -l | tr -d ' '; }
 
+CLUSTER_BYTES="$(cluster_bytes)"
 AGENT_DIR="$DRIVE/$(jget 'm.paths.agentDir')"
 SKILLS_DIR="$DRIVE/$(jget 'm.paths.skillsDir')"
 RUNTIME_DIR="$DRIVE/$(jget 'm.paths.runtimeDir')"
@@ -286,11 +299,11 @@ if [ "$DO_EXT" = 1 ] && [ "$SKIP_SKILLS" = 0 ]; then
             # exFAT scrive a cluster da 32 KB: il budget si conta sui file, e la
             # vecchia copia viene rimossa PRIMA di copiare quella nuova.
             STAGE_FILES="$(file_count "$STAGE/node_modules")"
-            NEED_MB=$(( STAGE_FILES * 32 / 1024 + 60 ))
+            NEED_MB=$(( STAGE_FILES * CLUSTER_BYTES / 1048576 + 60 ))
             FREE_MB="$(free_mb)"
             # la vecchia copia viene cancellata prima: conta come spazio disponibile
-            [ -d "$PKG_DIR" ] && FREE_MB=$(( FREE_MB + $(file_count "$PKG_DIR") * 32 / 1024 ))
-            ok "spazio: $STAGE_FILES file in staging, stimati $NEED_MB MB, disponibili ~$FREE_MB MB"
+            [ -d "$PKG_DIR" ] && FREE_MB=$(( FREE_MB + $(file_count "$PKG_DIR") * CLUSTER_BYTES / 1048576 ))
+            ok "spazio: $STAGE_FILES file in staging, stimati $NEED_MB MB (cluster $CLUSTER_BYTES B), disponibili ~$FREE_MB MB"
             if [ "$FREE_MB" -lt "$NEED_MB" ]; then
                 echo "spazio insufficiente sul drive: servono ~$NEED_MB MB, liberi $FREE_MB MB." >&2
                 echo "libera spazio (o usa una chiavetta più grande) e riprova: nessuna modifica fatta." >&2
@@ -398,20 +411,32 @@ if [ "$NEED_HOST" = "1" ] && { [ "$DO_CLIENT" = 1 ] || [ "$DO_EXT" = 1 ]; }; the
     if [ "$CLIENT_CHANGED" = 1 ] || [ "$EXT_CHANGED" = 1 ] || [ ! -f "$MARKER" ]; then
         PI_NOW="$(jget 'm.pi.version')"
         step "host SDK: pi $PI_NOW per i child pi"
-        STAGE="$STAGING/hostsdk-stage"
-        rm -rf "$STAGE"; mkdir -p "$STAGE"
-        run_npm install --prefix "$STAGE" --omit=dev --no-audit --no-fund --ignore-scripts --package-lock=false --legacy-peer-deps --omit=optional "@earendil-works/pi-coding-agent@$PI_NOW"
-        STAGE_FILES="$(file_count "$STAGE/node_modules")"
-        NEED_MB=$(( STAGE_FILES * 32 / 1024 + 60 ))
+        # prefer this machine's pi installation: same tree the build vendors,
+        # no download, no npm staging; fall back to the registry otherwise
+        HOST_ROOT=""
+        for cand in "$HOME/.pi/agent/install/releases/$PI_NOW/node_modules" "$HOME/.pi/agent/npm/node_modules"; do
+            if [ -f "$cand/@earendil-works/pi-coding-agent/package.json" ]; then HOST_ROOT="$cand"; break; fi
+        done
+        STAGE=""
+        if [ -n "$HOST_ROOT" ]; then
+            ok "sorgente host SDK: installazione locale di pi"
+        else
+            STAGE="$STAGING/hostsdk-stage"
+            rm -rf "$STAGE"; mkdir -p "$STAGE"
+            run_npm install --prefix "$STAGE" --omit=dev --no-audit --no-fund --ignore-scripts --package-lock=false --legacy-peer-deps --omit=optional "@earendil-works/pi-coding-agent@$PI_NOW"
+            HOST_ROOT="$STAGE/node_modules"
+        fi
+        STAGE_FILES="$(file_count "$HOST_ROOT")"
+        NEED_MB=$(( STAGE_FILES * CLUSTER_BYTES / 1048576 + 60 ))
         FREE_MB="$(free_mb)"
-        ok "spazio: $STAGE_FILES file in staging, stimati $NEED_MB MB, liberi $FREE_MB MB"
+        ok "spazio: $STAGE_FILES file, stimati $NEED_MB MB (cluster $CLUSTER_BYTES B), liberi $FREE_MB MB"
         if [ "$FREE_MB" -lt "$NEED_MB" ]; then
             echo "spazio insufficiente per l'host SDK: servono ~$NEED_MB MB, liberi $FREE_MB MB." >&2
             exit 1
         fi
         printf '{"packages":[{"name":"@earendil-works/pi-coding-agent","spec":"npm:@earendil-works/pi-coding-agent@%s"}]}\n' "$PI_NOW" > "$STAGING/host-sdk.json"
         "$NODE_EXE" "$DRIVE/scripts/vendor-packages.mjs" --profile "$STAGING/host-sdk.json" \
-            --dest "$RUNTIME_DIR" --host-packages "$STAGE/node_modules" --allow-host-provided --force --allow-missing \
+            --dest "$RUNTIME_DIR" --host-packages "$HOST_ROOT" --allow-host-provided --force --allow-missing \
             --json "$STAGING/host-sdk.report" | grep -E 'MB|!' | sed 's/^/    /' || true
         [ -f "$MARKER" ] || { echo "host SDK incomplete: $MARKER missing" >&2; exit 1; }
     else

@@ -53,8 +53,20 @@ $M = Get-Content $ManifestPath -Raw | ConvertFrom-Json
 
 $AgentDir = Join-Path $Drive $M.paths.agentDir
 $RuntimeDir = Join-Path $Drive $M.paths.runtimeDir
-$Staging = Join-Path ([IO.Path]::GetTempPath()) ("portable-pi-update-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+# the launchers move TMP/TEMP onto the drive (exFAT, 4 KB clusters, slow): npm
+# staging must stay on the host, so they export PI_HOST_TEMP before overriding
+$hostTemp = if ($env:PI_HOST_TEMP -and (Test-Path $env:PI_HOST_TEMP)) { $env:PI_HOST_TEMP } else { [IO.Path]::GetTempPath() }
+$Staging = Join-Path $hostTemp ("portable-pi-update-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Force -Path $Staging | Out-Null
+
+# Cluster size of the drive: exFAT on a small stick used to default to 32 KB, which
+# is what a tree of thousands of small files really costs on disk. Ask the volume
+# so the space guard follows the format (4 KB after re-formatting).
+$script:ClusterBytes = 32768
+try {
+    $vol = Get-Volume -DriveLetter ((Split-Path -Qualifier $Drive).TrimEnd(':')) -ErrorAction Stop
+    if ($vol.AllocationUnitSize -gt 0) { $script:ClusterBytes = [int]$vol.AllocationUnitSize }
+} catch { }
 
 function Step([string]$t) { Write-Host "==> $t" -ForegroundColor Cyan }
 function Ok([string]$t) { Write-Host "    $t" -ForegroundColor DarkGray }
@@ -331,13 +343,13 @@ try {
                 # The old tree is removed BEFORE copying, so only one copy exists.
                 $pkgDir = Join-Path $AgentDir 'packages'
                 $stageFiles = @(Get-ChildItem (Join-Path $stage 'node_modules') -Recurse -File -ErrorAction SilentlyContinue).Count
-                $needMb = [Math]::Ceiling($stageFiles * 32KB / 1MB) + 60
+                $needMb = [Math]::Ceiling($stageFiles * $script:ClusterBytes / 1MB) + 60
                 $letter = (Split-Path -Qualifier $Drive).TrimEnd(':')
                 $freeMb = [Math]::Floor((Get-PSDrive -Name $letter -ErrorAction SilentlyContinue).Free / 1MB)
                 # the old tree is deleted before copying: count its space as available
                 if (Test-Path $pkgDir) {
                     $oldFiles = @(Get-ChildItem $pkgDir -Recurse -File -ErrorAction SilentlyContinue).Count
-                    $freeMb += [Math]::Ceiling($oldFiles * 32KB / 1MB)
+                    $freeMb += [Math]::Ceiling($oldFiles * $script:ClusterBytes / 1MB)
                 }
                 Ok "spazio: $stageFiles file in staging, stimati $needMb MB, liberi $freeMb MB"
                 if ($freeMb -gt 0 -and $freeMb -lt $needMb) {
@@ -422,17 +434,38 @@ try {
         $marker = Join-Path $runtimeNm '@earendil-works\pi-coding-agent\dist\index.js'
         if ($clientChanged -or $extChanged -or -not (Test-Path $marker)) {
             Step "host SDK: pi $($M.pi.version) per $($needHostSdk.name -join ', ')"
+            # Prefer this machine's pi installation: it is the same tree the build
+            # vendors, with no download and no npm staging. Fall back to the
+            # registry when this PC has no pi at that version.
+            $hostRoot = $null
+            foreach ($cand in @(
+                (Join-Path $env:USERPROFILE ".pi\agent\install\releases\$($M.pi.version)\node_modules"),
+                (Join-Path $env:USERPROFILE '.pi\agent\npm\node_modules')
+            )) {
+                if (Test-Path (Join-Path (Join-Path $cand '@earendil-works\pi-coding-agent') 'package.json')) { $hostRoot = $cand; break }
+            }
             $stage = Join-Path $Staging 'hostsdk-stage'
-            Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-            New-Item -ItemType Directory -Force -Path $stage | Out-Null
-            Invoke-Npm -Label 'host-sdk' -Arguments @('install', '--prefix', $stage, '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts', '--package-lock=false', '--legacy-peer-deps', '--omit=optional', "@earendil-works/pi-coding-agent@$($M.pi.version)") | Out-Null
+            if ($hostRoot) { Ok "sorgente host SDK: installazione locale di pi" }
+            if (-not $hostRoot) {
+                Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+                New-Item -ItemType Directory -Force -Path $stage | Out-Null
+                Invoke-Npm -Label 'host-sdk' -Arguments @('install', '--prefix', $stage, '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts', '--package-lock=false', '--legacy-peer-deps', '--omit=optional', "@earendil-works/pi-coding-agent@$($M.pi.version)") | Out-Null
+                $hostRoot = Join-Path $stage 'node_modules'
+            }
+            $hFiles = @(Get-ChildItem $hostRoot -Recurse -File -ErrorAction SilentlyContinue).Count
+            $hNeedMb = [Math]::Ceiling($hFiles * $script:ClusterBytes / 1MB) + 40
+            $hFreeMb = [Math]::Floor((Get-PSDrive -Name ((Split-Path -Qualifier $Drive).TrimEnd(':')) -ErrorAction SilentlyContinue).Free / 1MB)
+            Ok "spazio host SDK: $hFiles file, stimati $hNeedMb MB, liberi $hFreeMb MB"
+            if ($hFreeMb -gt 0 -and $hFreeMb -lt $hNeedMb) {
+                throw "spazio insufficiente per l'host SDK: servono ~$hNeedMb MB, liberi $hFreeMb MB. Libera spazio e riprova: il client e' gia' aggiornato, l'host SDK no."
+            }
             $tmpProfile = Join-Path $Staging 'host-sdk.json'
             $json = @{ packages = @(@{ name = '@earendil-works/pi-coding-agent'; spec = "npm:@earendil-works/pi-coding-agent@$($M.pi.version)" }) } | ConvertTo-Json -Depth 5
             [IO.File]::WriteAllText($tmpProfile, $json, (New-Object System.Text.UTF8Encoding($false)))
             $tc = Get-DriveToolchain
             $log = Join-Path $Staging 'host-sdk.log'
             & $tc.Node (Join-Path $Drive 'scripts\vendor-packages.mjs') --profile $tmpProfile --dest $RuntimeDir `
-                --host-packages (Join-Path $stage 'node_modules') --allow-host-provided --force --allow-missing --json (Join-Path $Staging 'host-sdk.report') *> $log
+                --host-packages $hostRoot --allow-host-provided --force --allow-missing --json (Join-Path $Staging 'host-sdk.report') *> $log
             if ($LASTEXITCODE -ne 0) { Get-Content $log | Select-Object -Last 15 | ForEach-Object { Warn $_ }; throw 'host SDK vendoring failed' }
             foreach ($l in (Get-Content $log | Where-Object { $_ -match 'MB|!' })) { Ok $l.Trim() }
             Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue

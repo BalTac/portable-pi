@@ -143,6 +143,14 @@ merges it into `<drive>/manifest.json`, which is the record of what the drive co
 
 Two layers: a **launcher** that checks, explains and asks, and an **engine** that does the work.
 
+> **Formatting tip.** exFAT's default allocation unit for a small stick is 32 KB, so every
+> tiny file eats a whole 32 KB cluster (a 2 GB drive with ~30k files wastes ~500 MB).
+> Format with 4 KB clusters — universally supported by Windows/macOS/Linux — and the same
+> content fits in half the space:
+> `format F: /FS:exFAT /A:4096 /V:PORTABLE-PI` (Linux: `mkfs.exfat -c 4096 -L PORTABLE-PI`).
+> The updater reads the real cluster size from the volume, so its free-space guard follows
+> the format.
+
 ```
 Windows:  update.bat          Linux:  ./update.sh
 ```

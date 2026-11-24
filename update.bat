@@ -30,6 +30,9 @@ set "PI_CODING_AGENT_DIR=%USB%\config\pi"
 set "PI_CODING_AGENT_SESSION_DIR=%USB%\config\pi\sessions"
 set "PI_SKIP_VERSION_CHECK=1"
 set "PI_TELEMETRY=0"
+REM the host temp is remembered before TMP/TEMP move onto the drive: npm staging
+REM belongs on the host (exFAT makes npm take minutes per package)
+set "PI_HOST_TEMP=%TEMP%"
 set "TMP=%USB%\temp"
 set "TEMP=%USB%\temp"
 set "NPM_CONFIG_CACHE=%USB%\temp\npm-cache"
